@@ -18,7 +18,7 @@ import {
   AppliedFilters,
   ExcludeOption,
 } from "@/types/naver";
-import { RESULT_CONFIG, EXCLUDE_KEYWORDS } from "@/config/naver";
+import { RESULT_CONFIG, EXCLUDE_KEYWORDS, OUTLIER_CONFIG } from "@/config/naver";
 import { stripHtmlTags, containsAnyKeyword, safeParseInt } from "@/utils/text";
 import { TEXT_FILTER_CONFIG } from "@/config/naver";
 
@@ -142,6 +142,57 @@ export function deduplicateByLink(items: Item[]): Item[] {
  */
 export function sortByPriceAsc(items: Item[]): Item[] {
   return [...items].sort((a, b) => a.lprice - b.lprice);
+}
+
+/**
+ * IQR 기반 이상치 경계값 계산
+ * @param prices - 가격 배열 (정렬된 상태)
+ * @returns { lowerBound, upperBound } 또는 null (샘플 부족)
+ */
+export function calculateOutlierBounds(prices: number[]): { lowerBound: number; upperBound: number } | null {
+  if (prices.length < OUTLIER_CONFIG.MIN_SAMPLE_SIZE) {
+    return null;
+  }
+
+  const sorted = [...prices].sort((a, b) => a - b);
+  const n = sorted.length;
+  
+  // Q1 (25%), Q3 (75%) 계산
+  const q1Index = Math.floor(n * 0.25);
+  const q3Index = Math.floor(n * 0.75);
+  const q1 = sorted[q1Index];
+  const q3 = sorted[q3Index];
+  
+  // IQR = Q3 - Q1
+  const iqr = q3 - q1;
+  
+  // 경계값 계산
+  const lowerBound = q1 - OUTLIER_CONFIG.IQR_MULTIPLIER * iqr;
+  const upperBound = q3 + OUTLIER_CONFIG.IQR_MULTIPLIER * iqr;
+
+  return { lowerBound: Math.max(0, lowerBound), upperBound };
+}
+
+/**
+ * 이상치 제외 필터
+ * @param items - 필터링할 아이템 목록
+ * @returns 이상치가 제외된 아이템 목록
+ */
+export function filterOutliers(items: Item[]): Item[] {
+  if (items.length < OUTLIER_CONFIG.MIN_SAMPLE_SIZE) {
+    return items;
+  }
+
+  const prices = items.map(item => item.lprice);
+  const bounds = calculateOutlierBounds(prices);
+  
+  if (!bounds) {
+    return items;
+  }
+
+  return items.filter(item => 
+    item.lprice >= bounds.lowerBound && item.lprice <= bounds.upperBound
+  );
 }
 
 /**

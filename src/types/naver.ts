@@ -135,6 +135,8 @@ export interface LowestPriceResponse {
   appliedFilters: AppliedFilters;
   // 디버깅용
   excludedByKeywordsCount: number; // exclude 키워드로 제외된 건수
+  // 추가 리스트용 (Top10 이후 데이터)
+  allItems: Item[];
 }
 
 // ==================== Zod 스키마 (런타임 검증) ====================

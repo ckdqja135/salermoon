@@ -137,3 +137,25 @@ export const RESULT_CONFIG = {
   /** 가격 그룹에서 최대 표시할 상품 수 */
   MAX_ITEMS_PER_GROUP: 20,
 } as const;
+
+// ==================== UI 표시 설정 ====================
+export const DISPLAY_COUNT_OPTIONS = [10, 20, 30, 50, 100] as const;
+export type DisplayCountOption = (typeof DISPLAY_COUNT_OPTIONS)[number];
+
+export const DEFAULT_DISPLAY_COUNT: DisplayCountOption = 20;
+
+// ==================== 정렬 옵션 UI 라벨 ====================
+export const SORT_OPTION_LABELS: Record<SortOption, string> = {
+  sim: "정확도순",
+  date: "최신순",
+  asc: "가격낮은순",
+  dsc: "가격높은순",
+} as const;
+
+// ==================== 이상치 제외 설정 (IQR 기반) ====================
+export const OUTLIER_CONFIG = {
+  /** IQR 배수 (1.5가 표준, 상품 특성상 2.0 사용) */
+  IQR_MULTIPLIER: 2.0,
+  /** 최소 샘플 수 (이 미만이면 이상치 필터 미적용) */
+  MIN_SAMPLE_SIZE: 5,
+} as const;

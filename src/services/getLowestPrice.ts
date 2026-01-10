@@ -177,7 +177,7 @@ export async function getLowestPrice(
   // 6. Top1, Top10 그룹 추출
   const { top1, top10Groups, priceBand } = extractTopResults(filterResult.items);
 
-  // 7. 응답 구성
+  // 7. 응답 구성 (allItems 포함 - 클라이언트에서 추가 필터링/정렬/표시 가능)
   return {
     query,
     filters,
@@ -190,5 +190,6 @@ export async function getLowestPrice(
     appliedRelaxation: allRelaxation,
     appliedFilters: finalAppliedFilters,
     excludedByKeywordsCount: filterResult.excludedByKeywordsCount,
+    allItems: filterResult.items, // 전체 필터링된 아이템 (클라이언트 추가 처리용)
   };
 }
