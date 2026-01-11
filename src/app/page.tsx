@@ -299,13 +299,14 @@ function PriceInputCompact({
       <label className="text-xs font-medium whitespace-nowrap">{label}</label>
         <input
           type="text"
-        inputMode="numeric"
+          inputMode="numeric"
+          dir="ltr"
           value={inputValue}
           onChange={handleInputChange}
           onBlur={handleInputBlur}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-        className="price-input-compact"
+          className="price-input-compact"
         />
     </div>
   );

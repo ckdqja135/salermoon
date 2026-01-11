@@ -1223,7 +1223,8 @@ select.input-field {
   padding: 5px 8px;
   font-size: 12px;
   width: 80px;
-  text-align: right;
+  text-align: left;
+  direction: ltr;
   transition: border-color 0.2s ease;
   color: var(--color-text);
 }

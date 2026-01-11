@@ -445,15 +445,22 @@ export function calculatePriceBand(groups: PriceGroup[]): PriceBandSummary | nul
 
 /**
  * Top1과 Top10 그룹 추출
+ * 
+ * [중요] top1은 top10Groups[0]의 대표 상품으로 선택
+ * - groupByPrice가 이미 가격순으로 그룹을 정렬하므로
+ * - top1과 top10Groups[0]의 일관성이 보장됨
+ * - items의 정렬 순서(sim/date/asc/dsc)와 무관하게 최저가 선택
  */
 export function extractTopResults(items: Item[]): {
   top1: Item | null;
   top10Groups: PriceGroup[];
   priceBand: PriceBandSummary | null;
 } {
-  const top1 = items.length > 0 ? items[0] : null;
   const top10Groups = groupByPrice(items, RESULT_CONFIG.TOP_N);
   const priceBand = calculatePriceBand(top10Groups);
+  
+  // top1은 최저가 그룹의 대표 상품 (groupByPrice가 이미 가격순 정렬)
+  const top1 = top10Groups.length > 0 ? top10Groups[0].representative : null;
 
   return { top1, top10Groups, priceBand };
 }
