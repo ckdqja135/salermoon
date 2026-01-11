@@ -109,53 +109,78 @@ export async function getLowestPrice(
   });
 
   // 3. 결과가 0건이고 추가 완화가 가능한 경우 (비가격 필터만)
-  // [완화 단계 2] exclude 파라미터 제거 (API + 후처리 필터 모두 해제)
-  if (filterResult.items.length === 0 && currentExclude !== null && currentExclude.length > 0) {
-    currentExclude = null;
-    appliedRelaxation.push("dropExclude");
+  
+  // [완화 단계 2] minPrice 설정 시 pages 증가하여 고가 제품 탐색
+  if (filterResult.items.length === 0 && currentPages < PAGINATION_CONFIG.MAX_PAGES && minPrice !== null) {
+    currentPages = Math.min(currentPages + 3, PAGINATION_CONFIG.MAX_PAGES);
+    appliedRelaxation.push("increasePages");
 
-    // API 재호출 (exclude 없이)
+    // API 재호출 (더 많은 페이지로, 정확도순 유지)
     const result = await fetchAllPages(
       query,
       currentPages,
-      SORT_OPTIONS.ASC,
-      []
-    );
-    rawItems = result.items;
-    totalFromApi = result.total;
-
-    // 재필터링 (가격 필터는 항상 원본 유지, exclude는 해제)
-    filterResult = filterAndSortItems(rawItems, {
-      ...filters,
-      minPrice, // 원본 유지
-      maxPrice, // 원본 유지
-      filterNoise: filterResult.appliedFilters.filterNoise, // 이전 완화 상태 유지
-      exclude: currentExclude, // null로 해제
-      pages: currentPages,
-    });
-  }
-
-  // [완화 단계 3] pages를 1페이지로 축소
-  if (filterResult.items.length === 0 && currentPages > 1) {
-    currentPages = 1;
-    appliedRelaxation.push("reducePages");
-
-    // API 재호출 (1페이지만)
-    const result = await fetchAllPages(
-      query,
-      currentPages,
-      SORT_OPTIONS.ASC,
+      filters.sort, // 원래 정렬 유지 (정확도순)
       currentExclude ?? []
     );
     rawItems = result.items;
     totalFromApi = result.total;
 
-    // 재필터링 (가격 필터는 항상 원본 유지, 비가격 필터만 완화)
+    // 재필터링
     filterResult = filterAndSortItems(rawItems, {
       ...filters,
-      minPrice, // 원본 유지
-      maxPrice, // 원본 유지
-      filterNoise: false, // 노이즈 필터만 완화
+      minPrice,
+      maxPrice,
+      filterNoise: filterResult.appliedFilters.filterNoise,
+      exclude: currentExclude,
+      pages: currentPages,
+    });
+  }
+
+  // [완화 단계 3] exclude 파라미터 제거 (API + 후처리 필터 모두 해제)
+  if (filterResult.items.length === 0 && currentExclude !== null && currentExclude.length > 0) {
+    currentExclude = null;
+    appliedRelaxation.push("dropExclude");
+
+    // API 재호출 (exclude 없이, 정렬은 유지)
+    const result = await fetchAllPages(
+      query,
+      currentPages,
+      filters.sort, // 정확도순 유지 (가격순 변경 X)
+      []
+    );
+    rawItems = result.items;
+    totalFromApi = result.total;
+
+    // 재필터링
+    filterResult = filterAndSortItems(rawItems, {
+      ...filters,
+      minPrice,
+      maxPrice,
+      filterNoise: filterResult.appliedFilters.filterNoise,
+      exclude: currentExclude, // null로 해제
+      pages: currentPages,
+    });
+  }
+
+  // [완화 단계 4] minPrice 없을 때만 pages 축소 + 가격순 정렬
+  if (filterResult.items.length === 0 && currentPages > 1 && minPrice === null) {
+    currentPages = 1;
+    appliedRelaxation.push("reducePages");
+
+    const result = await fetchAllPages(
+      query,
+      currentPages,
+      SORT_OPTIONS.ASC, // 최저가를 찾을 때만 가격순
+      currentExclude ?? []
+    );
+    rawItems = result.items;
+    totalFromApi = result.total;
+
+    filterResult = filterAndSortItems(rawItems, {
+      ...filters,
+      minPrice,
+      maxPrice,
+      filterNoise: false,
       exclude: currentExclude,
       pages: currentPages,
     });

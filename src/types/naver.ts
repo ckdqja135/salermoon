@@ -101,13 +101,15 @@ export interface TargetPriceComparison {
 export type RelaxationStep =
   | "dropFilterNoise"
   | "dropExclude"
-  | "reducePages";
+  | "reducePages"
+  | "increasePages";
 
 /** 완화 단계 설명 */
 export const RELAXATION_STEP_LABELS: Record<RelaxationStep, string> = {
   dropFilterNoise: "노이즈 필터 해제",
   dropExclude: "제외 옵션 해제 (중고/렌탈/해외직구 포함)",
   reducePages: "검색 범위 축소",
+  increasePages: "검색 범위 확대 (고가 제품 탐색)",
 };
 
 /** 적용된 필터 요약 (개발용) */
@@ -203,7 +205,10 @@ export const NaverShopItemSchema = z.object({
   title: z.string(),
   link: z.string(),
   image: z.string().optional().default(""),
-  lprice: z.string(),
+  lprice: z.preprocess(
+    (val) => (val === "" || val === null || val === undefined) ? "0" : val,
+    z.string()
+  ), // 빈 문자열/null/undefined를 "0"으로 전처리
   hprice: z.string().optional().default("0"),
   mallName: z.string().optional().default(""),
   productId: z.string().optional().default(""),

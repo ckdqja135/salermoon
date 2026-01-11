@@ -6,6 +6,13 @@
  * 1. 가격 필터(minPrice/maxPrice)는 절대 완화되지 않음
  * 2. 필터 우선순위: 가격 → exclude 키워드 → 노이즈
  * 3. exclude 키워드 필터는 사용자가 체크한 옵션만 활성화
+ * 
+ * [정렬 원칙]
+ * - sort=sim (정확도순): 네이버 API 원본 순서를 절대 보존
+ *   · 검색어와 텍스트 매칭이 높은 상품이 상위에 위치
+ *   · 내부 정렬(가격순 등)로 정확도순을 훼손하지 않음
+ * - sort=date (날짜순): 네이버 API 원본 순서 유지
+ * - sort=asc/dsc (가격순): 가격순으로 재정렬
  */
 
 import {
@@ -137,11 +144,24 @@ export function deduplicateByLink(items: Item[]): Item[] {
 }
 
 /**
- * 가격 오름차순 정렬
+ * 가격순 정렬
+ * @param items - 정렬할 아이템 목록
+ * @param direction - 'asc' (오름차순) 또는 'dsc' (내림차순)
  * 동일 가격 시 원래 순서(정확도) 유지 (stable sort)
  */
+export function sortByPrice(items: Item[], direction: 'asc' | 'dsc' = 'asc'): Item[] {
+  return [...items].sort((a, b) => {
+    return direction === 'asc' 
+      ? a.lprice - b.lprice  // 오름차순
+      : b.lprice - a.lprice; // 내림차순
+  });
+}
+
+/**
+ * @deprecated sortByPrice 함수를 사용하세요
+ */
 export function sortByPriceAsc(items: Item[]): Item[] {
-  return [...items].sort((a, b) => a.lprice - b.lprice);
+  return sortByPrice(items, 'asc');
 }
 
 /**
@@ -197,19 +217,42 @@ export function filterOutliers(items: Item[]): Item[] {
 
 /**
  * 필터 적용 및 결과 반환 (중복제거 + 정렬 포함)
+ * 
+ * [중요] 정렬 원칙:
+ * - sort=sim (정확도순): 네이버 API 원본 순서 유지 (정렬 안 함)
+ * - sort=date (날짜순): 네이버 API 원본 순서 유지 (정렬 안 함)
+ * - sort=asc (가격 오름차순): 가격순 정렬
+ * - sort=dsc (가격 내림차순): 가격순 정렬 (역순)
  */
 function applyFiltersAndProcess(
   items: Item[],
   minPrice: number | null,
   maxPrice: number | null,
   excludeOptions: ExcludeOption[] | null,
-  filterNoise: boolean
+  filterNoise: boolean,
+  sortOption: string
 ): Item[] {
   const filtered = items.filter((item) =>
     matchesFilters(item, minPrice, maxPrice, excludeOptions, filterNoise)
   );
   const deduplicated = deduplicateByLink(filtered);
-  return sortByPriceAsc(deduplicated);
+  
+  // 정확도순(sim)/날짜순(date)일 때는 API 원본 순서 유지
+  if (sortOption === "sim" || sortOption === "date") {
+    return deduplicated; // API 원본 순서 보존
+  }
+  
+  // 가격순 정렬
+  if (sortOption === "asc") {
+    return sortByPrice(deduplicated, 'asc'); // 가격 오름차순
+  }
+  
+  if (sortOption === "dsc") {
+    return sortByPrice(deduplicated, 'dsc'); // 가격 내림차순
+  }
+  
+  // 기본값: 원본 순서 유지
+  return deduplicated;
 }
 
 /**
@@ -267,6 +310,9 @@ export function filterAndSortItems(
   // exclude 옵션도 원본 유지 (API + 후처리 필터 모두 적용)
   const excludeOptions = filters.exclude;
 
+  // 정렬 옵션 (정확도순 유지를 위해 중요)
+  const sortOption = filters.sort;
+
   // 비가격 필터만 완화 대상
   let currentFilterNoise = filters.filterNoise;
 
@@ -278,7 +324,8 @@ export function filterAndSortItems(
     minPrice,
     maxPrice,
     excludeOptions,
-    currentFilterNoise
+    currentFilterNoise,
+    sortOption
   );
 
   // 3. 결과가 0건이면 비가격 필터만 완화
@@ -286,7 +333,7 @@ export function filterAndSortItems(
   if (result.length === 0 && currentFilterNoise) {
     currentFilterNoise = false;
     appliedRelaxation.push("dropFilterNoise");
-    result = applyFiltersAndProcess(items, minPrice, maxPrice, excludeOptions, currentFilterNoise);
+    result = applyFiltersAndProcess(items, minPrice, maxPrice, excludeOptions, currentFilterNoise, sortOption);
   }
 
   // [중요] 가격 필터와 exclude 키워드 필터는 절대 완화하지 않음

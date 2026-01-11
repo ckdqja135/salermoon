@@ -507,7 +507,7 @@ function TargetPriceComparisonCard({ comparison }: { comparison: TargetPriceComp
   );
 }
 
-/** 완화 단계 알림 배너 */
+/** 완화 단계 알림 배너 (비활성화됨) */
 function RelaxationBanner({
   appliedRelaxation,
   appliedFilters,
@@ -515,40 +515,8 @@ function RelaxationBanner({
   appliedRelaxation: RelaxationStep[];
   appliedFilters: AppliedFilters;
 }) {
-  if (appliedRelaxation.length === 0) return null;
-
-  return (
-    <div className="warning-banner flex-col !items-start gap-2">
-      <div className="flex items-center gap-2">
-        <span>ℹ️</span>
-        <span className="font-medium">
-          검색 결과를 찾기 위해 필터가 자동 완화되었습니다
-        </span>
-      </div>
-      <div className="ml-6 text-sm space-y-1">
-        <div className="font-medium text-[var(--color-text-secondary)]">적용된 완화 단계:</div>
-        <ul className="list-disc list-inside space-y-0.5">
-          {appliedRelaxation.map((step) => (
-            <li key={step}>{RELAXATION_STEP_LABELS[step]}</li>
-          ))}
-        </ul>
-      </div>
-      <div className="ml-6 mt-2 text-xs text-[var(--color-text-secondary)] space-y-1">
-        <div>
-          <span className="font-medium">최종 적용 필터: </span>
-          최소가 {appliedFilters.minPrice !== null ? `${formatPrice(appliedFilters.minPrice)}원` : "없음"} /
-          최대가 {appliedFilters.maxPrice !== null ? `${formatPrice(appliedFilters.maxPrice)}원` : "없음"} /
-          노이즈필터 {appliedFilters.filterNoise ? "ON" : "OFF"}
-        </div>
-        <div>
-          제외옵션 {appliedFilters.exclude !== null && appliedFilters.exclude.length > 0
-            ? appliedFilters.exclude.join(", ")
-            : "없음"} /
-          키워드필터 {appliedFilters.excludeKeywordsEnabled ? "활성화" : "비활성화"}
-        </div>
-      </div>
-    </div>
-  );
+  // 항상 숨김 처리
+  return null;
 }
 
 /** Top10 사이드바 아이템 (컴팩트) */
