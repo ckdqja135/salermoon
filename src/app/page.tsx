@@ -884,38 +884,6 @@ function IdleState() {
   );
 }
 
-/** API 정보 패널 */
-function ApiInfoPanel({ searchCount }: { searchCount: number }) {
-  const estimatedCalls = searchCount * API_CONFIG.CALLS_PER_SEARCH;
-  const remaining = Math.max(0, API_CONFIG.DAILY_LIMIT - estimatedCalls);
-  const percentage = Math.round((remaining / API_CONFIG.DAILY_LIMIT) * 100);
-
-  return (
-    <div className="info-panel">
-      <div className="info-panel-header">
-        <span className="text-sm">⚡</span>
-        <span className="text-xs font-semibold">API 상태</span>
-      </div>
-      <div className="info-panel-content">
-        <div className="flex justify-between text-xs mb-1">
-          <span className="text-[var(--color-text-secondary)]">일일 한도</span>
-          <span className="font-medium">{formatPrice(API_CONFIG.DAILY_LIMIT)}회</span>
-        </div>
-        <div className="flex justify-between text-xs mb-2">
-          <span className="text-[var(--color-text-secondary)]">잔여 (추정)</span>
-          <span className="font-medium text-[var(--color-success)]">~{formatPrice(remaining)}회</span>
-        </div>
-        <div className="progress-bar">
-          <div className="progress-fill" style={{ width: `${percentage}%` }} />
-        </div>
-        <p className="text-xs text-[var(--color-text-secondary)] mt-2">
-          검색당 약 {API_CONFIG.CALLS_PER_SEARCH}회 호출
-        </p>
-      </div>
-    </div>
-  );
-}
-
 /** 검색 요약 패널 */
 function SearchSummaryPanel({ 
   result,
@@ -1203,7 +1171,6 @@ export default function Home() {
   const [loadingState, setLoadingState] = useState<LoadingState>("idle");
   const [result, setResult] = useState<SearchResult | null>(null);
   const [errorMessage, setErrorMessage] = useState("");
-  const [searchCount, setSearchCount] = useState(0);
 
   // 결과 필터/뷰 상태
   const [viewMode, setViewMode] = useState<ViewMode>("list");
@@ -1382,7 +1349,6 @@ export default function Home() {
 
       setResult(data);
       setLoadingState("success");
-      setSearchCount((prev) => prev + 1);
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다"
@@ -1530,7 +1496,6 @@ export default function Home() {
                 onGroupClick={setSelectedGroup}
               />
               <SearchSummaryPanel result={result} appliedFilters={result.appliedFilters} />
-              <ApiInfoPanel searchCount={searchCount} />
             </aside>
           </div>
         )}
