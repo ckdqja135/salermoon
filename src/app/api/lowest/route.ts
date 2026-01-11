@@ -80,7 +80,7 @@ export async function GET(request: NextRequest) {
       minPrice: String(filters.minPrice),
       maxPrice: String(filters.maxPrice),
       sort: filters.sort,
-      exclude: filters.exclude.join(":"),
+      exclude: (filters.exclude ?? []).join(":"),
       pages: String(filters.pages),
       filterNoise: String(filters.filterNoise),
     });
