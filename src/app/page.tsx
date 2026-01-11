@@ -1429,7 +1429,7 @@ export default function Home() {
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="검색어 입력 (예: 바나나, 아이폰)"
+              placeholder="검색어 입력"
               className="input-field-compact flex-1"
               disabled={loadingState === "loading"}
             />

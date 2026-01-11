@@ -1228,6 +1228,10 @@ select.input-field {
   color: var(--color-text);
 }
 
+.price-input-compact::placeholder {
+  text-align: left;
+}
+
 .price-input-compact:focus {
   outline: none;
   border-color: var(--color-primary);
