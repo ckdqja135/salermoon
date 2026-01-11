@@ -1,7 +1,8 @@
 @import "tailwindcss";
 
-:root {
-  /* 색상 팔레트 - 세일러문 테마 */
+/* ==================== 라이트 테마 (기본) ==================== */
+:root,
+[data-theme="light"] {
   --color-primary: #1e3a5f;
   --color-primary-light: #2d5a87;
   --color-primary-dark: #0f1d2f;
@@ -19,20 +20,19 @@
   --color-warning: #f59e0b;
 }
 
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-primary: #60a5fa;
-    --color-primary-light: #93c5fd;
-    --color-primary-dark: #3b82f6;
-    --color-accent: #fbbf24;
-    --color-accent-light: #fcd34d;
-    --color-secondary: #f472b6;
-    --color-background: #0f172a;
-    --color-surface: #1e293b;
-    --color-text: #f1f5f9;
-    --color-text-secondary: #94a3b8;
-    --color-border: #334155;
-  }
+/* ==================== 다크 테마 ==================== */
+[data-theme="dark"] {
+  --color-primary: #60a5fa;
+  --color-primary-light: #93c5fd;
+  --color-primary-dark: #3b82f6;
+  --color-accent: #fbbf24;
+  --color-accent-light: #fcd34d;
+  --color-secondary: #f472b6;
+  --color-background: #0f172a;
+  --color-surface: #1e293b;
+  --color-text: #f1f5f9;
+  --color-text-secondary: #94a3b8;
+  --color-border: #334155;
 }
 
 * {
@@ -578,6 +578,73 @@ select.input-field {
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
 }
 
+/* 전체 결과 통계 밴드 */
+.all-stats-band {
+  background: linear-gradient(135deg, rgba(30, 58, 95, 0.06) 0%, rgba(255, 107, 157, 0.04) 100%);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  padding: 10px 14px;
+}
+
+.all-stats-header {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 8px;
+}
+
+.all-stats-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 8px;
+}
+
+.all-stats-item {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 6px 8px;
+  background: var(--color-surface);
+  border-radius: 8px;
+  border: 1px solid rgba(30, 58, 95, 0.08);
+}
+
+.all-stats-label {
+  font-size: 10px;
+  color: var(--color-text-secondary);
+  text-transform: uppercase;
+  font-weight: 500;
+}
+
+.all-stats-value {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--color-text);
+}
+
+.all-stats-value.min {
+  color: var(--color-success);
+}
+
+.all-stats-value.max {
+  color: var(--color-error);
+}
+
+@media (max-width: 480px) {
+  .all-stats-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  
+  .all-stats-item {
+    padding: 4px 6px;
+  }
+  
+  .all-stats-value {
+    font-size: 12px;
+  }
+}
+
 /* 아이콘 버튼 */
 .btn-icon {
   display: flex;
@@ -1073,4 +1140,154 @@ select.input-field {
 
 .sidebar-list::-webkit-scrollbar-thumb:hover {
   background: var(--color-text-secondary);
+}
+
+/* ==================== 테마 토글 버튼 ==================== */
+.theme-toggle-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 36px;
+  height: 36px;
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 10px;
+  color: var(--color-text-secondary);
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.theme-toggle-btn:hover {
+  border-color: var(--color-primary);
+  color: var(--color-primary);
+  background: rgba(30, 58, 95, 0.04);
+}
+
+/* ==================== 컴팩트 검색 폼 ==================== */
+.search-form-compact {
+  background: var(--color-surface);
+  border-radius: 12px;
+  padding: 12px 16px;
+  margin-bottom: 16px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+}
+
+.input-field-compact {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 14px;
+  transition: border-color 0.2s ease;
+  width: 100%;
+  color: var(--color-text);
+}
+
+.input-field-compact:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+.input-field-compact::placeholder {
+  color: var(--color-text-secondary);
+}
+
+.btn-primary-compact {
+  background: linear-gradient(135deg, var(--color-primary) 0%, var(--color-primary-dark) 100%);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 8px 20px;
+  font-weight: 600;
+  font-size: 14px;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  white-space: nowrap;
+}
+
+.btn-primary-compact:hover:not(:disabled) {
+  transform: translateY(-1px);
+  box-shadow: 0 2px 8px rgba(30, 58, 95, 0.25);
+}
+
+.btn-primary-compact:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* 컴팩트 가격 입력 */
+.price-input-compact {
+  background: var(--color-surface);
+  border: 1px solid var(--color-border);
+  border-radius: 6px;
+  padding: 5px 8px;
+  font-size: 12px;
+  width: 80px;
+  text-align: right;
+  transition: border-color 0.2s ease;
+  color: var(--color-text);
+}
+
+.price-input-compact:focus {
+  outline: none;
+  border-color: var(--color-primary);
+}
+
+/* 컴팩트 체크박스 */
+.checkbox-wrapper-compact {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  cursor: pointer;
+}
+
+.checkbox-wrapper-compact input[type="checkbox"] {
+  width: 14px;
+  height: 14px;
+  accent-color: var(--color-primary);
+  cursor: pointer;
+}
+
+/* 컴팩트 토글 스위치 */
+.toggle-switch-sm {
+  position: relative;
+  width: 36px;
+  height: 20px;
+  background: var(--color-border);
+  border-radius: 10px;
+  cursor: pointer;
+  transition: background 0.3s ease;
+  flex-shrink: 0;
+}
+
+.toggle-switch-sm.active {
+  background: var(--color-primary);
+}
+
+.toggle-switch-sm::after {
+  content: '';
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 16px;
+  height: 16px;
+  background: white;
+  border-radius: 50%;
+  transition: transform 0.3s ease;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.15);
+}
+
+.toggle-switch-sm.active::after {
+  transform: translateX(16px);
+}
+
+/* 반응형 - 컴팩트 폼 */
+@media (max-width: 640px) {
+  .search-form-compact {
+    padding: 10px 12px;
+  }
+
+  .price-input-compact {
+    width: 70px;
+  }
 }

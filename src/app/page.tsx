@@ -86,6 +86,7 @@ interface TargetPriceComparison {
 type LoadingState = "idle" | "loading" | "success" | "error";
 type ViewMode = "list" | "grid";
 type SortOption = "sim" | "date" | "asc" | "dsc";
+type ThemeMode = "light" | "dark";
 
 // ==================== 상수 ====================
 const UI_CONFIG = {
@@ -95,7 +96,7 @@ const UI_CONFIG = {
 
 const API_CONFIG = {
   DAILY_LIMIT: 25000,
-  CALLS_PER_SEARCH: 3, // 기본 페이지 수
+  CALLS_PER_SEARCH: 3,
 } as const;
 
 const DISPLAY_COUNT_OPTIONS = [10, 20, 30, 50, 100] as const;
@@ -104,7 +105,7 @@ const DEFAULT_DISPLAY_COUNT = 20;
 const EXCLUDE_OPTIONS = [
   { value: "used", label: "중고" },
   { value: "rental", label: "렌탈" },
-  { value: "cbshop", label: "해외직구/구매대행" },
+  { value: "cbshop", label: "직구" },
 ] as const;
 
 const SORT_OPTIONS = [
@@ -158,7 +159,6 @@ function calculateComparison(targetPrice: number, lowestPrice: number): TargetPr
   };
 }
 
-/** IQR 기반 이상치 필터 (클라이언트) */
 function filterOutliers(items: Item[]): Item[] {
   if (items.length < 5) return items;
   
@@ -173,7 +173,6 @@ function filterOutliers(items: Item[]): Item[] {
   return items.filter(item => item.lprice >= lowerBound && item.lprice <= upperBound);
 }
 
-/** CSV 다운로드 */
 function downloadCSV(items: Item[], filename: string) {
   const BOM = "\uFEFF";
   const headers = ["상품명", "판매처", "최저가", "링크"];
@@ -194,10 +193,66 @@ function downloadCSV(items: Item[], filename: string) {
   URL.revokeObjectURL(url);
 }
 
+// ==================== 테마 훅 ====================
+function useTheme() {
+  const [theme, setTheme] = useState<ThemeMode>("light");
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+    const stored = localStorage.getItem("theme") as ThemeMode | null;
+    if (stored) {
+      setTheme(stored);
+      document.documentElement.setAttribute("data-theme", stored);
+    } else {
+      document.documentElement.setAttribute("data-theme", "light");
+    }
+  }, []);
+
+  const toggleTheme = useCallback(() => {
+    const next = theme === "light" ? "dark" : "light";
+    setTheme(next);
+    localStorage.setItem("theme", next);
+    document.documentElement.setAttribute("data-theme", next);
+  }, [theme]);
+
+  return { theme, toggleTheme, mounted };
+}
+
 // ==================== 컴포넌트 ====================
 
-/** 가격 입력 (숫자만) */
-function PriceInput({
+/** 테마 토글 버튼 */
+function ThemeToggle({ theme, onToggle }: { theme: ThemeMode; onToggle: () => void }) {
+  return (
+    <button
+      type="button"
+      onClick={onToggle}
+      className="theme-toggle-btn"
+      title={theme === "light" ? "다크 모드로 전환" : "라이트 모드로 전환"}
+    >
+      {theme === "light" ? (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"></path>
+        </svg>
+      ) : (
+        <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <circle cx="12" cy="12" r="5"></circle>
+          <line x1="12" y1="1" x2="12" y2="3"></line>
+          <line x1="12" y1="21" x2="12" y2="23"></line>
+          <line x1="4.22" y1="4.22" x2="5.64" y2="5.64"></line>
+          <line x1="18.36" y1="18.36" x2="19.78" y2="19.78"></line>
+          <line x1="1" y1="12" x2="3" y2="12"></line>
+          <line x1="21" y1="12" x2="23" y2="12"></line>
+          <line x1="4.22" y1="19.78" x2="5.64" y2="18.36"></line>
+          <line x1="18.36" y1="5.64" x2="19.78" y2="4.22"></line>
+        </svg>
+      )}
+    </button>
+  );
+}
+
+/** 컴팩트 가격 입력 (실시간 콤마 포맷) */
+function PriceInputCompact({
   label,
   value,
   onChange,
@@ -216,7 +271,17 @@ function PriceInput({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-    setInputValue(raw);
+    // 숫자만 추출
+    const numbersOnly = raw.replace(/[^\d]/g, "");
+    if (numbersOnly === "") {
+      setInputValue("");
+      return;
+    }
+    // 숫자를 파싱하고 천 단위 콤마로 포맷
+    const num = parseInt(numbersOnly, 10);
+    if (!isNaN(num)) {
+      setInputValue(formatPrice(num));
+    }
   };
 
   const handleInputBlur = () => {
@@ -226,32 +291,28 @@ function PriceInput({
   };
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
-    if (e.key === "Enter") {
-      handleInputBlur();
-    }
+    if (e.key === "Enter") handleInputBlur();
   };
 
   return (
-    <div className="flex items-center gap-3">
-      <label className="text-sm font-medium whitespace-nowrap">{label}</label>
-      <div className="flex items-center gap-2">
+    <div className="flex items-center gap-1.5">
+      <label className="text-xs font-medium whitespace-nowrap">{label}</label>
         <input
           type="text"
+        inputMode="numeric"
           value={inputValue}
           onChange={handleInputChange}
           onBlur={handleInputBlur}
           onKeyDown={handleKeyDown}
           placeholder={placeholder}
-          className="price-input"
+        className="price-input-compact"
         />
-        <span className="text-sm text-[var(--color-text-secondary)]">원</span>
-      </div>
     </div>
   );
 }
 
-/** 제외 옵션 체크박스 */
-function ExcludeOptions({
+/** 제외 옵션 (컴팩트) */
+function ExcludeOptionsCompact({
   selected,
   onChange,
 }: {
@@ -267,26 +328,24 @@ function ExcludeOptions({
   };
 
   return (
-    <div className="space-y-2">
-      <label className="text-sm font-medium">제외 옵션</label>
-      <div className="flex flex-wrap gap-4">
+    <div className="flex items-center gap-3 flex-wrap">
+      <span className="text-xs font-medium">제외:</span>
         {EXCLUDE_OPTIONS.map((option) => (
-          <label key={option.value} className="checkbox-wrapper">
+        <label key={option.value} className="checkbox-wrapper-compact">
             <input
               type="checkbox"
               checked={selected.includes(option.value)}
               onChange={() => handleToggle(option.value)}
             />
-            <span className="text-sm">{option.label}</span>
+          <span className="text-xs">{option.label}</span>
           </label>
         ))}
-      </div>
     </div>
   );
 }
 
-/** 페이지 수 선택 */
-function PagesSelect({
+/** 페이지 수 선택 (컴팩트) */
+function PagesSelectCompact({
   value,
   onChange,
 }: {
@@ -294,17 +353,17 @@ function PagesSelect({
   onChange: (value: number) => void;
 }) {
   return (
-    <div className="space-y-2">
-      <label className="text-sm font-medium">검색 범위</label>
+    <div className="flex items-center gap-1.5">
+      <label className="text-xs font-medium whitespace-nowrap">수집:</label>
       <select
         value={value}
         onChange={(e) => onChange(Number(e.target.value))}
-        className="input-field"
+        className="input-field-xs"
       >
         {Array.from({ length: UI_CONFIG.MAX_PAGES }, (_, i) => i + 1).map(
           (num) => (
             <option key={num} value={num}>
-              {num}페이지 ({num * 100}개)
+              {num}페이지 (최대 {num * 100}개)
             </option>
           )
         )}
@@ -313,8 +372,8 @@ function PagesSelect({
   );
 }
 
-/** 토글 스위치 */
-function ToggleSwitch({
+/** 토글 스위치 (컴팩트) */
+function ToggleSwitchCompact({
   checked,
   onChange,
   label,
@@ -324,15 +383,15 @@ function ToggleSwitch({
   label: string;
 }) {
   return (
-    <label className="flex items-center gap-3 cursor-pointer select-none">
+    <label className="flex items-center gap-2 cursor-pointer select-none">
       <button
         type="button"
         role="switch"
         aria-checked={checked}
         onClick={() => onChange(!checked)}
-        className={`toggle-switch ${checked ? "active" : ""}`}
+        className={`toggle-switch-sm ${checked ? "active" : ""}`}
       />
-      <span className="text-sm font-medium">{label}</span>
+      <span className="text-xs font-medium">{label}</span>
     </label>
   );
 }
@@ -700,31 +759,18 @@ function MallFilterInline({
     }
   };
 
-  const handleSelectAll = () => {
-    onChange(allMalls);
-  };
-
-  const handleClearAll = () => {
-    onChange([]);
-  };
+  const handleSelectAll = () => onChange(allMalls);
+  const handleClearAll = () => onChange([]);
 
   return (
     <div className="mall-filter-inline">
       <div className="flex items-center gap-2 mb-2 flex-wrap">
         <label className="text-sm font-medium">마켓:</label>
-        <button
-          type="button"
-          onClick={handleSelectAll}
-          className="text-xs text-[var(--color-primary)] hover:underline"
-        >
+        <button type="button" onClick={handleSelectAll} className="text-xs text-[var(--color-primary)] hover:underline">
           전체선택
         </button>
         <span className="text-xs text-[var(--color-text-secondary)]">|</span>
-        <button
-          type="button"
-          onClick={handleClearAll}
-          className="text-xs text-[var(--color-text-secondary)] hover:underline"
-        >
+        <button type="button" onClick={handleClearAll} className="text-xs text-[var(--color-text-secondary)] hover:underline">
           초기화
         </button>
       </div>
@@ -860,10 +906,7 @@ function ApiInfoPanel({ searchCount }: { searchCount: number }) {
           <span className="font-medium text-[var(--color-success)]">~{formatPrice(remaining)}회</span>
         </div>
         <div className="progress-bar">
-          <div 
-            className="progress-fill" 
-            style={{ width: `${percentage}%` }}
-          />
+          <div className="progress-fill" style={{ width: `${percentage}%` }} />
         </div>
         <p className="text-xs text-[var(--color-text-secondary)] mt-2">
           검색당 약 {API_CONFIG.CALLS_PER_SEARCH}회 호출
@@ -875,10 +918,10 @@ function ApiInfoPanel({ searchCount }: { searchCount: number }) {
 
 /** 검색 요약 패널 */
 function SearchSummaryPanel({ 
-  result, 
+  result,
   appliedFilters 
-}: { 
-  result: SearchResult; 
+}: {
+  result: SearchResult;
   appliedFilters: AppliedFilters;
 }) {
   return (
@@ -901,24 +944,18 @@ function SearchSummaryPanel({
             <span className="text-[var(--color-text-secondary)]">필터 후</span>
             <span className="font-medium text-[var(--color-primary)]">{formatPrice(result.totalCandidates)}개</span>
           </div>
-          {result.excludedByKeywordsCount > 0 && (
+        {result.excludedByKeywordsCount > 0 && (
             <div className="flex justify-between">
               <span className="text-[var(--color-text-secondary)]">키워드 제외</span>
               <span className="font-medium">{formatPrice(result.excludedByKeywordsCount)}개</span>
             </div>
-          )}
-        </div>
+        )}
+      </div>
         <div className="mt-3 pt-3 border-t border-[var(--color-border)]">
           <div className="text-xs text-[var(--color-text-secondary)] space-y-1">
-            <div>
-              범위: {appliedFilters.pages}페이지
-            </div>
-            <div>
-              노이즈필터: {appliedFilters.filterNoise ? "ON" : "OFF"}
-            </div>
-            <div>
-              제외: {appliedFilters.exclude?.join(", ") || "없음"}
-            </div>
+            <div>범위: {appliedFilters.pages}페이지</div>
+            <div>노이즈필터: {appliedFilters.filterNoise ? "ON" : "OFF"}</div>
+            <div>제외: {appliedFilters.exclude?.join(", ") || "없음"}</div>
           </div>
         </div>
       </div>
@@ -954,15 +991,55 @@ function Top10Sidebar({
       <div className="sidebar-list">
         {groups.map((group, index) => (
           <Top10SidebarItem
-            key={group.price + "-" + index}
-            group={group}
-            rank={index + 1}
+                key={group.price + "-" + index}
+                group={group}
+                rank={index + 1}
             onGroupClick={onGroupClick}
-          />
-        ))}
-      </div>
+              />
+            ))}
+          </div>
       <div className="px-3 pb-3 text-xs text-center text-[var(--color-text-secondary)]">
         클릭하여 상세 보기
+      </div>
+    </div>
+  );
+}
+
+/** 전체 결과 통계 타입 */
+interface AllItemsStats {
+  minPrice: number;
+  maxPrice: number;
+  avgPrice: number;
+  medianPrice: number;
+  count: number;
+}
+
+/** 전체 결과 통계 카드 (컴팩트) */
+function AllItemsStatsCard({ stats }: { stats: AllItemsStats }) {
+  return (
+    <div className="all-stats-band">
+      <div className="all-stats-header">
+        <span className="text-xs">📊</span>
+        <span className="text-xs font-semibold">전체 가격 분포</span>
+        <span className="text-xs text-[var(--color-text-secondary)]">({formatPrice(stats.count)}개)</span>
+      </div>
+      <div className="all-stats-grid">
+        <div className="all-stats-item">
+          <span className="all-stats-label">최저</span>
+          <span className="all-stats-value min">{formatPrice(stats.minPrice)}원</span>
+        </div>
+        <div className="all-stats-item">
+          <span className="all-stats-label">최고</span>
+          <span className="all-stats-value max">{formatPrice(stats.maxPrice)}원</span>
+        </div>
+        <div className="all-stats-item">
+          <span className="all-stats-label">평균</span>
+          <span className="all-stats-value">{formatPrice(stats.avgPrice)}원</span>
+        </div>
+        <div className="all-stats-item">
+          <span className="all-stats-label">중앙</span>
+          <span className="all-stats-value">{formatPrice(stats.medianPrice)}원</span>
+        </div>
       </div>
     </div>
   );
@@ -978,6 +1055,7 @@ function ResultsHeader({
   processedItemsCount,
   displayedItemsCount,
   allMalls,
+  allItemsStats,
   onViewModeChange,
   onDisplayCountChange,
   onExcludeOutliersChange,
@@ -993,6 +1071,7 @@ function ResultsHeader({
   processedItemsCount: number;
   displayedItemsCount: number;
   allMalls: string[];
+  allItemsStats: AllItemsStats | null;
   onViewModeChange: (mode: ViewMode) => void;
   onDisplayCountChange: (count: number) => void;
   onExcludeOutliersChange: (value: boolean) => void;
@@ -1002,7 +1081,6 @@ function ResultsHeader({
 }) {
   return (
     <div className="results-header-bar">
-      {/* 상단 행: 제목 + 액션 버튼 */}
       <div className="flex items-center justify-between flex-wrap gap-3">
         <div className="flex items-center gap-3">
           <h2 className="text-base font-bold flex items-center gap-2">
@@ -1014,12 +1092,7 @@ function ResultsHeader({
           </span>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            type="button"
-            onClick={onDownloadCSV}
-            className="btn-icon"
-            title="CSV 다운로드"
-          >
+          <button type="button" onClick={onDownloadCSV} className="btn-icon" title="CSV 다운로드">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
               <polyline points="7 10 12 15 17 10" />
@@ -1030,9 +1103,14 @@ function ResultsHeader({
         </div>
       </div>
 
-      {/* 필터 행 */}
+      {/* 전체 결과 통계 */}
+      {allItemsStats && (
+        <div className="mt-3">
+          <AllItemsStatsCard stats={allItemsStats} />
+        </div>
+      )}
+
       <div className="flex flex-wrap items-center gap-3 mt-3">
-        {/* 정렬 */}
         <div className="flex items-center gap-1.5">
           <label className="text-xs font-medium">정렬:</label>
           <select
@@ -1041,14 +1119,11 @@ function ResultsHeader({
             className="input-field-xs"
           >
             {SORT_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
+              <option key={opt.value} value={opt.value}>{opt.label}</option>
             ))}
           </select>
         </div>
 
-        {/* 표시 개수 */}
         <div className="flex items-center gap-1.5">
           <label className="text-xs font-medium">표시:</label>
           <select
@@ -1057,22 +1132,18 @@ function ResultsHeader({
             className="input-field-xs"
           >
             {DISPLAY_COUNT_OPTIONS.map((count) => (
-              <option key={count} value={count}>
-                {count}개
-              </option>
+              <option key={count} value={count}>{count}개</option>
             ))}
           </select>
         </div>
 
-        {/* 이상치 제외 */}
-        <ToggleSwitch
+        <ToggleSwitchCompact
           checked={excludeOutliers}
           onChange={onExcludeOutliersChange}
           label="이상치 제외"
         />
       </div>
 
-      {/* 마켓 필터 */}
       {allMalls.length > 0 && (
         <div className="mt-3 pt-3 border-t border-[var(--color-border)]">
           <MallFilterInline
@@ -1087,13 +1158,7 @@ function ResultsHeader({
 }
 
 /** 상품 리스트/그리드 영역 */
-function ProductListArea({
-  items,
-  viewMode,
-}: {
-  items: Item[];
-  viewMode: ViewMode;
-}) {
+function ProductListArea({ items, viewMode }: { items: Item[]; viewMode: ViewMode }) {
   if (items.length === 0) {
     return (
       <div className="text-center py-8 text-[var(--color-text-secondary)]">
@@ -1123,6 +1188,8 @@ function ProductListArea({
 
 // ==================== 메인 페이지 ====================
 export default function Home() {
+  const { theme, toggleTheme, mounted } = useTheme();
+
   // 검색 상태
   const [query, setQuery] = useState("");
   const [minPrice, setMinPrice] = useState<number>(0);
@@ -1130,8 +1197,6 @@ export default function Home() {
   const [exclude, setExclude] = useState<string[]>(["used", "rental", "cbshop"]);
   const [pages, setPages] = useState<number>(UI_CONFIG.DEFAULT_PAGES);
   const [filterNoise, setFilterNoise] = useState(false);
-
-  // 목표가 입력
   const [targetPrice, setTargetPrice] = useState<number>(0);
 
   // 결과 상태
@@ -1148,14 +1213,12 @@ export default function Home() {
   const [clientSort, setClientSort] = useState<SortOption>("asc");
   const [selectedGroup, setSelectedGroup] = useState<PriceGroup | null>(null);
 
-  // 전체 몰 목록 추출
   const allMalls = useMemo(() => {
     if (!result) return [];
     const mallSet = new Set(result.allItems.map((item) => item.mallName).filter(Boolean));
     return Array.from(mallSet).sort();
   }, [result]);
 
-  // 클라이언트 필터링 및 정렬
   const processedItems = useMemo(() => {
     if (!result) return [];
     let items = [...result.allItems];
@@ -1184,7 +1247,26 @@ export default function Home() {
 
   const displayedItems = processedItems.slice(0, displayCount);
 
-  // 필터된 결과 기반 Top1/Top10 재계산
+  // 전체 결과 통계 계산
+  const allItemsStats = useMemo(() => {
+    if (processedItems.length === 0) return null;
+    
+    const prices = processedItems.map((item) => item.lprice);
+    const sortedPrices = [...prices].sort((a, b) => a - b);
+    const sum = prices.reduce((acc, p) => acc + p, 0);
+    const mid = Math.floor(sortedPrices.length / 2);
+    
+    return {
+      minPrice: sortedPrices[0],
+      maxPrice: sortedPrices[sortedPrices.length - 1],
+      avgPrice: Math.round(sum / prices.length),
+      medianPrice: sortedPrices.length % 2 === 0
+        ? Math.round((sortedPrices[mid - 1] + sortedPrices[mid]) / 2)
+        : sortedPrices[mid],
+      count: processedItems.length,
+    };
+  }, [processedItems]);
+
   const { effectiveTop1, effectiveTop10Groups, effectivePriceBand } = useMemo(() => {
     if (!result) {
       return { effectiveTop1: null, effectiveTop10Groups: [], effectivePriceBand: null };
@@ -1251,11 +1333,7 @@ export default function Home() {
       };
     }
 
-    return {
-      effectiveTop1: top1,
-      effectiveTop10Groups: groups,
-      effectivePriceBand: priceBand,
-    };
+    return { effectiveTop1: top1, effectiveTop10Groups: groups, effectivePriceBand: priceBand };
   }, [result, selectedMalls, excludeOutliers]);
 
   const comparison = useMemo(() => {
@@ -1323,67 +1401,72 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-pattern">
-      <div className="max-w-screen-2xl mx-auto px-3 md:px-6 py-4 md:py-8">
+      <div className="max-w-screen-2xl mx-auto px-3 md:px-6 py-3 md:py-6">
         {/* 헤더 */}
-        <header className="text-center mb-5">
-          <h1 className="text-2xl md:text-3xl font-black mb-1">
+        <header className="flex items-center justify-between mb-4">
+          <div className="flex-1" />
+          <div className="text-center">
+            <h1 className="text-xl md:text-2xl font-black">
             <span className="bg-gradient-to-r from-[var(--color-primary)] via-[var(--color-secondary)] to-[var(--color-accent)] bg-clip-text text-transparent">
               🌙 세일러문
             </span>
           </h1>
-          <p className="text-sm text-[var(--color-text-secondary)]">
-            프로모션 가격 설계를 위한 시장 최저가 검색
+            <p className="text-xs text-[var(--color-text-secondary)]">
+              시장 최저가 검색
           </p>
+          </div>
+          <div className="flex-1 flex justify-end">
+            {mounted && <ThemeToggle theme={theme} onToggle={toggleTheme} />}
+          </div>
         </header>
 
-        {/* 검색 폼 */}
-        <div className="card-static p-4 md:p-5 mb-4 space-y-4">
-          <div className="flex gap-3">
+        {/* 검색 폼 (컴팩트) */}
+        <div className="search-form-compact">
+          {/* 1행: 검색어 + 버튼 */}
+          <div className="flex gap-2">
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="검색어를 입력하세요 (예: 바나나, 아이폰)"
-              className="input-field flex-1"
+              placeholder="검색어 입력 (예: 바나나, 아이폰)"
+              className="input-field-compact flex-1"
               disabled={loadingState === "loading"}
             />
             <button
               onClick={handleSearch}
               disabled={loadingState === "loading"}
-              className="btn-primary whitespace-nowrap"
+              className="btn-primary-compact"
             >
-              {loadingState === "loading" ? "검색 중..." : "검색"}
+              {loadingState === "loading" ? "검색중" : "검색"}
             </button>
           </div>
 
-          <div className="grid md:grid-cols-3 gap-4 items-end">
-            <PriceInput label="최소 가격" value={minPrice} onChange={setMinPrice} placeholder="미입력시 제한없음" />
-            <PriceInput label="최대 가격" value={maxPrice} onChange={setMaxPrice} placeholder="미입력시 제한없음" />
-            <PriceInput label="목표가" value={targetPrice} onChange={setTargetPrice} placeholder="행사가/납품가" />
+          {/* 2행: 가격 필터 + 제외 옵션 */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
+            <PriceInputCompact label="최소" value={minPrice} onChange={setMinPrice} placeholder="제한없음" />
+            <PriceInputCompact label="최대" value={maxPrice} onChange={setMaxPrice} placeholder="제한없음" />
+            <PriceInputCompact label="목표가" value={targetPrice} onChange={setTargetPrice} placeholder="비교용" />
+            <div className="h-4 w-px bg-[var(--color-border)] hidden md:block" />
+            <ExcludeOptionsCompact selected={exclude} onChange={setExclude} />
           </div>
 
-          <div className="grid md:grid-cols-2 gap-6">
-            <ExcludeOptions selected={exclude} onChange={setExclude} />
-            <PagesSelect value={pages} onChange={setPages} />
-          </div>
-
-          <div className="pt-2 border-t border-[var(--color-border)]">
-            <ToggleSwitch checked={filterNoise} onChange={setFilterNoise} label="노이즈 키워드 제외" />
+          {/* 3행: 수집 범위 + 노이즈 필터 */}
+          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2 pt-2 border-t border-[var(--color-border)]">
+            <PagesSelectCompact value={pages} onChange={setPages} />
+            <ToggleSwitchCompact checked={filterNoise} onChange={setFilterNoise} label="노이즈 제외" />
           </div>
         </div>
 
-        {/* 결과 영역 - 2열 레이아웃 */}
-        {loadingState === "idle" && <IdleState />}
-        {loadingState === "loading" && <LoadingState />}
-        {loadingState === "error" && <ErrorState message={errorMessage} />}
+        {/* 결과 영역 */}
+          {loadingState === "idle" && <IdleState />}
+          {loadingState === "loading" && <LoadingState />}
+          {loadingState === "error" && <ErrorState message={errorMessage} />}
         {loadingState === "success" && result && result.totalCandidates === 0 && <EmptyState />}
 
         {hasResults && (
           <div className="main-layout">
-            {/* 좌측: 메인 컨텐츠 */}
             <div className="main-content">
-              {/* 필터 완화 알림 */}
               {result.filterRelaxed && (
                 <RelaxationBanner
                   appliedRelaxation={result.appliedRelaxation}
@@ -1391,7 +1474,6 @@ export default function Home() {
                 />
               )}
 
-              {/* 목표가 비교 */}
               {comparison && (
                 <section className="mb-6">
                   <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
@@ -1402,18 +1484,6 @@ export default function Home() {
                 </section>
               )}
 
-              {/* Top1 */}
-              {effectiveTop1 && (
-                <section className="mb-6">
-                  <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
-                    <span className="text-xl">🏆</span>
-                    최저가 상품
-                  </h2>
-                  <Top1Card item={effectiveTop1} />
-                </section>
-              )}
-
-              {/* 필터 헤더 */}
               <ResultsHeader
                 viewMode={viewMode}
                 displayCount={displayCount}
@@ -1423,6 +1493,7 @@ export default function Home() {
                 processedItemsCount={processedItems.length}
                 displayedItemsCount={displayedItems.length}
                 allMalls={allMalls}
+                allItemsStats={allItemsStats}
                 onViewModeChange={setViewMode}
                 onDisplayCountChange={setDisplayCount}
                 onExcludeOutliersChange={setExcludeOutliers}
@@ -1431,7 +1502,16 @@ export default function Home() {
                 onDownloadCSV={handleDownloadCSV}
               />
 
-              {/* 상품 리스트/그리드 */}
+              {effectiveTop1 && (
+                <section className="mb-6 mt-4">
+                  <h2 className="text-lg font-bold mb-3 flex items-center gap-2">
+                    <span className="text-xl">🏆</span>
+                    최저가 상품
+                  </h2>
+                  <Top1Card item={effectiveTop1} />
+                </section>
+              )}
+
               <section className="mt-4">
                 <ProductListArea items={displayedItems} viewMode={viewMode} />
                 
@@ -1441,40 +1521,25 @@ export default function Home() {
                   </div>
                 )}
               </section>
-            </div>
+        </div>
 
-            {/* 우측: 사이드바 */}
             <aside className="sidebar">
-              {/* Top10 */}
               <Top10Sidebar
                 groups={effectiveTop10Groups}
                 priceBand={effectivePriceBand}
                 onGroupClick={setSelectedGroup}
               />
-
-              {/* 검색 요약 */}
-              <SearchSummaryPanel 
-                result={result} 
-                appliedFilters={result.appliedFilters} 
-              />
-
-              {/* API 정보 */}
+              <SearchSummaryPanel result={result} appliedFilters={result.appliedFilters} />
               <ApiInfoPanel searchCount={searchCount} />
             </aside>
           </div>
         )}
 
-        {/* 가격 그룹 모달 */}
         {selectedGroup && (
-          <PriceGroupModal
-            group={selectedGroup}
-            onClose={() => setSelectedGroup(null)}
-          />
+          <PriceGroupModal group={selectedGroup} onClose={() => setSelectedGroup(null)} />
         )}
 
-        {/* 푸터 */}
-        <footer className="text-center mt-10 text-xs text-[var(--color-text-secondary)]">
-          <p>
+        <footer className="text-center mt-8 text-xs text-[var(--color-text-secondary)]">
             <a
               href="https://developers.naver.com/docs/serviceapi/search/shopping/shopping.md"
               target="_blank"
@@ -1484,7 +1549,6 @@ export default function Home() {
               네이버 쇼핑 API
             </a>
             를 활용한 최저가 검색 서비스
-          </p>
         </footer>
       </div>
     </main>
