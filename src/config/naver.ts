@@ -159,3 +159,11 @@ export const OUTLIER_CONFIG = {
   /** 최소 샘플 수 (이 미만이면 이상치 필터 미적용) */
   MIN_SAMPLE_SIZE: 5,
 } as const;
+
+// ==================== 검색 히스토리 설정 ====================
+export const SEARCH_HISTORY_CONFIG = {
+  /** localStorage 키 */
+  STORAGE_KEY: "searchHistory",
+  /** 최대 저장 개수 */
+  MAX_ITEMS: 15,
+} as const;

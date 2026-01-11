@@ -2,6 +2,7 @@
 
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import Image from "next/image";
+import { useSearchHistory, SearchHistoryParams, SearchHistoryItem } from "@/hooks/useSearchHistory";
 
 // ==================== 타입 정의 ====================
 interface Item {
@@ -518,6 +519,161 @@ function RelaxationBanner({
 }) {
   // 항상 숨김 처리
   return null;
+}
+
+/** 히스토리 필터 요약 텍스트 생성 */
+function formatHistorySummary(params: SearchHistoryParams): string {
+  const parts: string[] = [];
+  
+  if (params.minPrice > 0 || params.maxPrice > 0) {
+    const min = params.minPrice > 0 ? formatPrice(params.minPrice) : "0";
+    const max = params.maxPrice > 0 ? formatPrice(params.maxPrice) : "∞";
+    parts.push(`${min}~${max}원`);
+  }
+  
+  if (params.exclude.length > 0) {
+    const excludeLabels: Record<string, string> = {
+      used: "중고",
+      rental: "렌탈",
+      cbshop: "직구",
+    };
+    const excluded = params.exclude
+      .map((e) => excludeLabels[e] || e)
+      .join("/");
+    parts.push(`-${excluded}`);
+  }
+  
+  if (params.filterNoise) {
+    parts.push("노이즈제외");
+  }
+  
+  parts.push(`${params.pages}페이지`);
+  
+  return parts.join(" · ");
+}
+
+/** 상대 시간 포맷 */
+function formatRelativeTime(timestamp: number): string {
+  const now = Date.now();
+  const diff = now - timestamp;
+  
+  const minutes = Math.floor(diff / (1000 * 60));
+  const hours = Math.floor(diff / (1000 * 60 * 60));
+  const days = Math.floor(diff / (1000 * 60 * 60 * 24));
+  
+  if (minutes < 1) return "방금 전";
+  if (minutes < 60) return `${minutes}분 전`;
+  if (hours < 24) return `${hours}시간 전`;
+  if (days < 7) return `${days}일 전`;
+  
+  return new Date(timestamp).toLocaleDateString("ko-KR", {
+    month: "short",
+    day: "numeric",
+  });
+}
+
+/** 검색 히스토리 패널 */
+function SearchHistoryPanel({
+  history,
+  isOpen,
+  onToggle,
+  onSelect,
+  onRemove,
+  onClear,
+}: {
+  history: SearchHistoryItem[];
+  isOpen: boolean;
+  onToggle: () => void;
+  onSelect: (params: SearchHistoryParams) => void;
+  onRemove: (id: string) => void;
+  onClear: () => void;
+}) {
+  if (history.length === 0) return null;
+
+  return (
+    <div className="search-history-panel">
+      <button
+        type="button"
+        onClick={onToggle}
+        className="search-history-toggle"
+      >
+        <span className="flex items-center gap-1.5">
+          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <circle cx="12" cy="12" r="10" />
+            <polyline points="12,6 12,12 16,14" />
+          </svg>
+          <span className="text-xs font-medium">최근 검색</span>
+          <span className="history-count">{history.length}</span>
+        </span>
+        <svg
+          width="12"
+          height="12"
+          viewBox="0 0 24 24"
+          fill="none"
+          stroke="currentColor"
+          strokeWidth="2"
+          className={`transition-transform ${isOpen ? "rotate-180" : ""}`}
+        >
+          <polyline points="6,9 12,15 18,9" />
+        </svg>
+      </button>
+
+      {isOpen && (
+        <div className="search-history-list">
+          <div className="search-history-header">
+            <span className="text-xs text-[var(--color-text-secondary)]">
+              최근 {history.length}개 검색
+            </span>
+            <button
+              type="button"
+              onClick={onClear}
+              className="text-xs text-[var(--color-error)] hover:underline"
+            >
+              전체 삭제
+            </button>
+          </div>
+          
+          {history.map((item) => (
+            <div key={item.id} className="search-history-item">
+              <button
+                type="button"
+                onClick={() => onSelect(item.params)}
+                className="search-history-item-content"
+              >
+                <div className="flex items-center gap-2 min-w-0">
+                  <span className="text-sm font-medium truncate">
+                    {item.params.query}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <span className="text-xs text-[var(--color-text-secondary)] truncate max-w-[180px]">
+                    {formatHistorySummary(item.params)}
+                  </span>
+                  <span className="text-xs text-[var(--color-text-tertiary)] whitespace-nowrap">
+                    {formatRelativeTime(item.savedAt)}
+                  </span>
+                </div>
+              </button>
+              <button
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onRemove(item.id);
+                }}
+                className="search-history-delete"
+                title="삭제"
+              >
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="18" y1="6" x2="6" y2="18" />
+                  <line x1="6" y1="6" x2="18" y2="18" />
+                </svg>
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
 }
 
 /** Top10 사이드바 아이템 (컴팩트) */
@@ -1149,6 +1305,10 @@ export default function Home() {
   const [clientSort, setClientSort] = useState<SortOption>("asc");
   const [selectedGroup, setSelectedGroup] = useState<PriceGroup | null>(null);
 
+  // 검색 히스토리
+  const { history, isAvailable: historyAvailable, addHistory, removeHistory, clearHistory } = useSearchHistory();
+  const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
   const allMalls = useMemo(() => {
     if (!result) return [];
     const mallSet = new Set(result.allItems.map((item) => item.mallName).filter(Boolean));
@@ -1318,13 +1478,80 @@ export default function Home() {
 
       setResult(data);
       setLoadingState("success");
+
+      // 검색 성공 시 히스토리에 저장
+      addHistory({
+        query: query.trim(),
+        sort: "sim", // 기본 정렬
+        minPrice,
+        maxPrice,
+        pages,
+        filterNoise,
+        exclude,
+      });
     } catch (error) {
       setErrorMessage(
         error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다"
       );
       setLoadingState("error");
     }
-  }, [query, minPrice, maxPrice, exclude, pages, filterNoise]);
+  }, [query, minPrice, maxPrice, exclude, pages, filterNoise, addHistory]);
+
+  /** 히스토리 항목 선택 시 폼 세팅 후 재검색 */
+  const handleHistorySelect = useCallback((params: SearchHistoryParams) => {
+    // 폼 상태 설정
+    setQuery(params.query);
+    setMinPrice(params.minPrice);
+    setMaxPrice(params.maxPrice);
+    setExclude(params.exclude);
+    setPages(params.pages);
+    setFilterNoise(params.filterNoise);
+    
+    // 클라이언트 필터 복원 (있는 경우)
+    if (params.displayCount) setDisplayCount(params.displayCount);
+    if (params.clientSort) setClientSort(params.clientSort as SortOption);
+    
+    // 히스토리 패널 닫기
+    setIsHistoryOpen(false);
+    
+    // 자동 재검색을 위해 setTimeout 사용 (상태 업데이트 후 실행)
+    setTimeout(async () => {
+      setLoadingState("loading");
+      setErrorMessage("");
+      setSelectedMalls([]);
+      setExcludeOutliers(false);
+
+      try {
+        const searchParams = new URLSearchParams({
+          query: params.query,
+          pages: String(params.pages),
+          filterNoise: String(params.filterNoise),
+        });
+
+        if (params.minPrice > 0) searchParams.set("minPrice", String(params.minPrice));
+        if (params.maxPrice > 0) searchParams.set("maxPrice", String(params.maxPrice));
+        if (params.exclude.length > 0) searchParams.set("exclude", params.exclude.join(":"));
+
+        const response = await fetch(`/api/lowest?${searchParams.toString()}`);
+        const data = await response.json();
+
+        if (!response.ok) {
+          throw new Error(data.error || "검색에 실패했습니다");
+        }
+
+        setResult(data);
+        setLoadingState("success");
+
+        // 재검색 성공 시 히스토리 갱신
+        addHistory(params);
+      } catch (error) {
+        setErrorMessage(
+          error instanceof Error ? error.message : "알 수 없는 오류가 발생했습니다"
+        );
+        setLoadingState("error");
+      }
+    }, 0);
+  }, [addHistory]);
 
   const handleKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === "Enter" && !e.nativeEvent.isComposing) {
@@ -1391,6 +1618,18 @@ export default function Home() {
             <PagesSelectCompact value={pages} onChange={setPages} />
             <ToggleSwitchCompact checked={filterNoise} onChange={setFilterNoise} label="노이즈 제외" />
           </div>
+
+          {/* 검색 히스토리 */}
+          {historyAvailable && history.length > 0 && (
+            <SearchHistoryPanel
+              history={history}
+              isOpen={isHistoryOpen}
+              onToggle={() => setIsHistoryOpen(!isHistoryOpen)}
+              onSelect={handleHistorySelect}
+              onRemove={removeHistory}
+              onClear={clearHistory}
+            />
+          )}
         </div>
 
         {/* 결과 영역 */}
