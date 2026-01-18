@@ -3,6 +3,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import Image from "next/image";
 import { useSearchHistory, SearchHistoryParams, SearchHistoryItem } from "@/hooks/useSearchHistory";
+import html2canvas from "html2canvas";
 
 // ==================== 타입 정의 ====================
 interface Item {
@@ -40,7 +41,8 @@ interface PriceBandSummary {
 type RelaxationStep =
   | "dropFilterNoise"
   | "dropExclude"
-  | "reducePages";
+  | "reducePages"
+  | "increasePages";
 
 interface AppliedFilters {
   minPrice: number | null;
@@ -120,6 +122,7 @@ const RELAXATION_STEP_LABELS: Record<RelaxationStep, string> = {
   dropFilterNoise: "노이즈 필터 해제",
   dropExclude: "제외 옵션 해제 (중고/렌탈/해외직구 포함)",
   reducePages: "검색 범위 축소",
+  increasePages: "검색 범위 확대",
 };
 
 // ==================== 유틸리티 함수 ====================
@@ -222,6 +225,56 @@ function useTheme() {
 
 // ==================== 컴포넌트 ====================
 
+/** 1개 단가 계산 카드 */
+function UnitPriceCard({ item }: { item: Item }) {
+  const [qty, setQty] = useState(1);
+  const unitPrice = Math.floor(item.lprice / qty);
+
+  const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const val = parseInt(e.target.value, 10);
+    setQty(isNaN(val) || val < 1 ? 1 : val);
+  };
+
+  return (
+    <div className="sidebar-card p-4">
+      <div className="flex items-center gap-2 mb-3">
+        <span className="text-xl">🧮</span>
+        <h3 className="text-sm font-bold">1개 단가 계산기</h3>
+      </div>
+      
+      <div className="flex items-center justify-between gap-2 mb-3">
+        <label className="text-xs text-[var(--color-text-secondary)]">묶음 수량</label>
+        <div className="flex items-center gap-1">
+          <input 
+            type="number" 
+            min="1"
+            value={qty} 
+            onChange={handleQtyChange} 
+            className="input-field-sm w-16 text-right"
+          />
+          <span className="text-xs">개</span>
+        </div>
+      </div>
+
+      <div className="pt-3 border-t border-[var(--color-border)]">
+        <div className="flex justify-between items-end">
+          <span className="text-xs text-[var(--color-text-secondary)]">개당 단가</span>
+          <div>
+            <span className="text-xl font-bold text-[var(--color-accent-dark)]">
+              {formatPrice(unitPrice)}
+            </span>
+            <span className="text-sm ml-1">원</span>
+          </div>
+        </div>
+      </div>
+      
+      <p className="text-[10px] text-[var(--color-text-secondary)] mt-2 text-right">
+        * 배송비 제외 기준
+      </p>
+    </div>
+  );
+}
+
 /** 테마 토글 버튼 */
 function ThemeToggle({ theme, onToggle }: { theme: ThemeMode; onToggle: () => void }) {
   return (
@@ -272,13 +325,11 @@ function PriceInputCompact({
 
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const raw = e.target.value;
-    // 숫자만 추출
     const numbersOnly = raw.replace(/[^\d]/g, "");
     if (numbersOnly === "") {
       setInputValue("");
       return;
     }
-    // 숫자를 파싱하고 천 단위 콤마로 포맷
     const num = parseInt(numbersOnly, 10);
     if (!isNaN(num)) {
       setInputValue(formatPrice(num));
@@ -509,7 +560,7 @@ function TargetPriceComparisonCard({ comparison }: { comparison: TargetPriceComp
   );
 }
 
-/** 완화 단계 알림 배너 (비활성화됨) */
+/** 완화 단계 알림 배너 */
 function RelaxationBanner({
   appliedRelaxation,
   appliedFilters,
@@ -517,7 +568,6 @@ function RelaxationBanner({
   appliedRelaxation: RelaxationStep[];
   appliedFilters: AppliedFilters;
 }) {
-  // 항상 숨김 처리
   return null;
 }
 
@@ -1010,13 +1060,15 @@ function IdleState() {
 }
 
 /** 검색 요약 패널 */
-function SearchSummaryPanel({ 
+function SearchSummaryPanel({
   result,
-  appliedFilters 
+  appliedFilters
 }: {
   result: SearchResult;
   appliedFilters: AppliedFilters;
 }) {
+  const isLimitReached = result.totalFromApi >= 1000;
+
   return (
     <div className="info-panel">
       <div className="info-panel-header">
@@ -1031,9 +1083,18 @@ function SearchSummaryPanel({
           </div>
           <div className="flex justify-between">
             <span className="text-[var(--color-text-secondary)]">API 결과</span>
-            <span className="font-medium">{formatPrice(result.totalFromApi)}개</span>
+            <span className="font-medium">
+              {formatPrice(result.totalFromApi)}개
+              {isLimitReached && " (MAX)"}
+            </span>
           </div>
-          <div className="flex justify-between">
+          {isLimitReached && (
+            <div className="text-[10px] text-[var(--color-warning)] bg-[rgba(245,158,11,0.1)] p-1.5 rounded mt-1">
+              ⚠️ 네이버 API 제한으로 1000개까지만 수집되었습니다.
+              {result.allItems.length < 1000 && " 더 많은 결과를 위해 가격대별 검색을 권장합니다."}
+            </div>
+          )}
+          <div className="flex justify-between mt-2">
             <span className="text-[var(--color-text-secondary)]">필터 후</span>
             <span className="font-medium text-[var(--color-primary)]">{formatPrice(result.totalCandidates)}개</span>
           </div>
@@ -1155,6 +1216,8 @@ function ResultsHeader({
   onSelectedMallsChange,
   onClientSortChange,
   onDownloadCSV,
+  onCapture,
+  onCopy,
 }: {
   viewMode: ViewMode;
   displayCount: number;
@@ -1171,6 +1234,8 @@ function ResultsHeader({
   onSelectedMallsChange: (malls: string[]) => void;
   onClientSortChange: (sort: SortOption) => void;
   onDownloadCSV: () => void;
+  onCapture: () => void;
+  onCopy: () => void;
 }) {
   return (
     <div className="results-header-bar">
@@ -1185,6 +1250,18 @@ function ResultsHeader({
           </span>
         </div>
         <div className="flex items-center gap-2">
+          <button type="button" onClick={onCopy} className="btn-icon" title="결과 클립보드 복사">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+              <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+            </svg>
+          </button>
+          <button type="button" onClick={onCapture} className="btn-icon" title="결과 이미지 저장">
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"></path>
+              <circle cx="12" cy="13" r="4"></circle>
+            </svg>
+          </button>
           <button type="button" onClick={onDownloadCSV} className="btn-icon" title="CSV 다운로드">
             <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
@@ -1308,6 +1385,9 @@ export default function Home() {
   // 검색 히스토리
   const { history, isAvailable: historyAvailable, addHistory, removeHistory, clearHistory } = useSearchHistory();
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
+
+  // 캡쳐 참조
+  const resultAreaRef = useRef<HTMLDivElement>(null);
 
   const allMalls = useMemo(() => {
     if (!result) return [];
@@ -1445,6 +1525,53 @@ export default function Home() {
     const date = new Date().toISOString().slice(0, 10);
     downloadCSV(items, `salermoon_${result.query}_${date}.csv`);
   }, [processedItems, displayCount, result]);
+
+  // 캡쳐 기능
+  const handleCapture = useCallback(async () => {
+    if (!resultAreaRef.current) return;
+    try {
+      const canvas = await html2canvas(resultAreaRef.current, {
+        useCORS: true,
+        scale: 2, // 고해상도
+        backgroundColor: theme === 'dark' ? '#0f172a' : '#f8fafc',
+      } as any);
+      const url = canvas.toDataURL('image/png');
+      const link = document.createElement('a');
+      link.href = url;
+      link.download = `salermoon_capture_${new Date().getTime()}.png`;
+      link.click();
+    } catch (err) {
+      console.error(err);
+      alert('이미지 저장에 실패했습니다.');
+    }
+  }, [theme]);
+
+  // 클립보드 복사
+  const handleCopyClipboard = useCallback(async () => {
+    if (!resultAreaRef.current) return;
+    try {
+      const canvas = await html2canvas(resultAreaRef.current, {
+        useCORS: true,
+        scale: 2,
+        backgroundColor: theme === 'dark' ? '#0f172a' : '#f8fafc',
+      } as any);
+      canvas.toBlob(async (blob) => {
+        if (!blob) return;
+        try {
+          await navigator.clipboard.write([ 
+            new ClipboardItem({ 'image/png': blob })
+          ]);
+          alert('클립보드에 복사되었습니다!');
+        } catch (err) {
+          console.error(err);
+          alert('클립보드 복사에 실패했습니다. 브라우저 설정을 확인해주세요.');
+        }
+      });
+    } catch (err) {
+      console.error(err);
+      alert('이미지 생성에 실패했습니다.');
+    }
+  }, [theme]);
 
   const handleSearch = useCallback(async () => {
     if (!query.trim()) {
@@ -1640,7 +1767,7 @@ export default function Home() {
 
         {hasResults && (
           <div className="main-layout">
-            <div className="main-content">
+            <div className="main-content" ref={resultAreaRef}>
               {result.filterRelaxed && (
                 <RelaxationBanner
                   appliedRelaxation={result.appliedRelaxation}
@@ -1674,6 +1801,8 @@ export default function Home() {
                 onSelectedMallsChange={setSelectedMalls}
                 onClientSortChange={setClientSort}
                 onDownloadCSV={handleDownloadCSV}
+                onCapture={handleCapture}
+                onCopy={handleCopyClipboard}
               />
 
               {effectiveTop1 && (
@@ -1698,6 +1827,7 @@ export default function Home() {
         </div>
 
             <aside className="sidebar">
+              {effectiveTop1 && <UnitPriceCard item={effectiveTop1} />}
               <Top10Sidebar
                 groups={effectiveTop10Groups}
                 priceBand={effectivePriceBand}
