@@ -3,7 +3,7 @@
 import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import Image from "next/image";
 import { useSearchHistory, SearchHistoryParams, SearchHistoryItem } from "@/hooks/useSearchHistory";
-import html2canvas from "html2canvas";
+import { toPng, toBlob } from "html-to-image";
 
 // ==================== 타입 정의 ====================
 interface Item {
@@ -227,7 +227,6 @@ function useTheme() {
 
 /** 1개 단가 계산 카드 */
 function UnitPriceCard({ items }: { items: Item[] }) {
-  const [qty, setQty] = useState(1);
   
   const stats = useMemo(() => {
     if (items.length === 0) return null;
@@ -255,17 +254,12 @@ function UnitPriceCard({ items }: { items: Item[] }) {
     };
   }, [items]);
 
-  const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const val = parseInt(e.target.value, 10);
-    setQty(isNaN(val) || val < 1 ? 1 : val);
-  };
-
   if (!stats) return null;
 
-  const unitMin = Math.floor(stats.min / qty);
-  const unitMedian = Math.floor(stats.median / qty);
-  const unitAvg = Math.floor(stats.avg / qty);
-  const unitRecommend = Math.floor(stats.recommend / qty);
+  const unitMin = stats.min;
+  const unitMedian = stats.median;
+  const unitAvg = stats.avg;
+  const unitRecommend = stats.recommend;
 
   return (
     <div className="sidebar-card p-6 relative overflow-hidden border-2 border-[var(--color-primary)]/20">
@@ -283,22 +277,6 @@ function UnitPriceCard({ items }: { items: Item[] }) {
         <div>
           <h2 className="text-lg font-black text-[var(--color-text)] tracking-tight leading-none">1개당 단가</h2>
           <span className="px-2 py-0.5 bg-[var(--color-primary)]/10 text-[var(--color-primary)] rounded-md text-[10px] font-black inline-block mt-1">UNIT PRICE</span>
-        </div>
-      </div>
-
-      <div className="mb-4">
-        <div className="flex items-center justify-between gap-2 p-3 bg-[var(--color-background)] rounded-lg border border-[var(--color-border)]">
-          <label className="text-xs font-bold text-[var(--color-text-secondary)]">묶음 수량 설정</label>
-          <div className="flex items-center gap-1">
-            <input 
-              type="number" 
-              min="1"
-              value={qty} 
-              onChange={handleQtyChange} 
-              className="w-16 text-right bg-transparent font-bold border-b border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
-            />
-            <span className="text-xs font-bold text-[var(--color-text-secondary)]">개</span>
-          </div>
         </div>
       </div>
 
@@ -520,15 +498,21 @@ function ProductImage({ src, alt, size = "md" }: { src?: string; alt: string; si
     );
   }
 
+  // Use proxy for images to avoid CORS issues in capture
+  const proxySrc = src.startsWith("http") 
+    ? `/api/image-proxy?url=${encodeURIComponent(src)}`
+    : src;
+
   return (
     <Image
-      src={src}
+      src={proxySrc}
       alt={alt}
       width={size === "lg" ? 200 : size === "md" ? 64 : size === "xs" ? 40 : 48}
       height={size === "lg" ? 200 : size === "md" ? 64 : size === "xs" ? 40 : 48}
       className={`${sizeClass} object-cover rounded-lg flex-shrink-0`}
       onError={() => setHasError(true)}
       unoptimized
+      crossOrigin="anonymous"
     />
   );
 }
@@ -1374,8 +1358,102 @@ function ResultsHeader({
   );
 }
 
+/** 리스트 뷰 그룹 아이템 */
+function ListViewGroupItem({ 
+  group, 
+  index,
+  onClick 
+}: { 
+  group: PriceGroup; 
+  index: number;
+  onClick: (group: PriceGroup) => void;
+}) {
+  const item = group.representative;
+  
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(group)}
+      className="list-item w-full text-left group"
+    >
+      <span className="rank-badge-small">{index + 1}</span>
+      <ProductImage src={item.image} alt={item.titleText} size="sm" />
+      <div className="flex-1 min-w-0">
+        <div className="flex items-center gap-2">
+           <h4
+            className="text-sm font-medium line-clamp-1"
+            dangerouslySetInnerHTML={{ __html: item.title }}
+          />
+          <span className="text-xs font-bold text-[var(--color-accent-dark)] bg-[var(--color-accent)]/10 px-1.5 py-0.5 rounded flex-shrink-0">
+            {group.count}개 묶음
+          </span>
+        </div>
+        <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
+          {item.mallName} {group.count > 1 && `외 ${group.count - 1}개 판매처`}
+        </p>
+      </div>
+      <div className="text-right flex-shrink-0">
+        <span className="price">{formatPrice(group.price)}</span>
+        <span className="text-sm">원</span>
+        <div className="text-[10px] text-[var(--color-primary)] font-medium opacity-0 group-hover:opacity-100 transition-opacity">
+          모아보기 &gt;
+        </div>
+      </div>
+    </button>
+  );
+}
+
+/** 그리드 뷰 그룹 아이템 */
+function GridViewGroupItem({ 
+  group, 
+  onClick 
+}: { 
+  group: PriceGroup; 
+  onClick: (group: PriceGroup) => void;
+}) {
+  const item = group.representative;
+  
+  return (
+    <button
+      type="button"
+      onClick={() => onClick(group)}
+      className="grid-item w-full text-left group relative"
+    >
+      <div className="absolute top-2 right-2 z-10">
+        <span className="text-xs font-bold text-white bg-[var(--color-accent)] px-1.5 py-0.5 rounded shadow-sm">
+          {group.count}개 묶음
+        </span>
+      </div>
+      <div className="grid-item-image">
+        <ProductImage src={item.image} alt={item.titleText} size="lg" />
+      </div>
+      <div className="p-3">
+        <h4
+          className="text-sm font-medium line-clamp-2 mb-1"
+          dangerouslySetInnerHTML={{ __html: item.title }}
+        />
+        <p className="text-xs text-[var(--color-text-secondary)] mb-2 line-clamp-1">
+          {item.mallName} {group.count > 1 && `외 ${group.count - 1}개`}
+        </p>
+        <div className="text-right">
+          <span className="price">{formatPrice(group.price)}</span>
+          <span className="text-sm">원</span>
+        </div>
+      </div>
+    </button>
+  );
+}
+
 /** 상품 리스트/그리드 영역 */
-function ProductListArea({ items, viewMode }: { items: Item[]; viewMode: ViewMode }) {
+function ProductListArea({ 
+  items, 
+  viewMode,
+  onGroupClick 
+}: { 
+  items: Item[]; 
+  viewMode: ViewMode;
+  onGroupClick: (group: PriceGroup) => void;
+}) {
   if (items.length === 0) {
     return (
       <div className="text-center py-8 text-[var(--color-text-secondary)]">
@@ -1384,21 +1462,83 @@ function ProductListArea({ items, viewMode }: { items: Item[]; viewMode: ViewMod
     );
   }
 
+  // 인접한 같은 가격 상품 그룹화 (뷰 모드 상관없이 적용)
+  const groupedItems = useMemo(() => {
+    const groups: PriceGroup[] = [];
+    if (items.length === 0) return groups;
+
+    let currentGroup: Item[] = [items[0]];
+    
+    for (let i = 1; i < items.length; i++) {
+      if (items[i].lprice === currentGroup[0].lprice) {
+        currentGroup.push(items[i]);
+      } else {
+        groups.push({
+          price: currentGroup[0].lprice,
+          count: currentGroup.length,
+          items: currentGroup,
+          representative: currentGroup[0]
+        });
+        currentGroup = [items[i]];
+      }
+    }
+    
+    // 마지막 그룹 추가
+    groups.push({
+      price: currentGroup[0].lprice,
+      count: currentGroup.length,
+      items: currentGroup,
+      representative: currentGroup[0]
+    });
+
+    return groups;
+  }, [items]);
+
   if (viewMode === "list") {
     return (
       <div className="space-y-2">
-        {items.map((item, index) => (
-          <ListViewItem key={item.link + index} item={item} index={index} />
-        ))}
+        {groupedItems.map((group, index) => {
+          if (group.count > 1) {
+            return (
+              <ListViewGroupItem 
+                key={`group-${group.price}-${index}`}
+                group={group} 
+                index={index}
+                onClick={onGroupClick}
+              />
+            );
+          }
+          return (
+            <ListViewItem 
+              key={group.representative.link + index} 
+              item={group.representative} 
+              index={index} 
+            />
+          );
+        })}
       </div>
     );
   }
 
   return (
     <div className="grid-container">
-      {items.map((item, index) => (
-        <GridViewItem key={item.link + index} item={item} />
-      ))}
+      {groupedItems.map((group, index) => {
+        if (group.count > 1) {
+          return (
+            <GridViewGroupItem 
+              key={`group-${group.price}-${index}`}
+              group={group} 
+              onClick={onGroupClick}
+            />
+          );
+        }
+        return (
+          <GridViewItem 
+            key={group.representative.link + index} 
+            item={group.representative} 
+          />
+        );
+      })}
     </div>
   );
 }
@@ -1577,14 +1717,15 @@ export default function Home() {
   const handleCapture = useCallback(async () => {
     if (!resultAreaRef.current) return;
     try {
-      const canvas = await html2canvas(resultAreaRef.current, {
-        useCORS: true,
-        scale: 2, // 고해상도
+      const dataUrl = await toPng(resultAreaRef.current, {
+        cacheBust: true,
         backgroundColor: theme === 'dark' ? '#0f172a' : '#f8fafc',
-      } as any);
-      const url = canvas.toDataURL('image/png');
+        style: {
+          fontVariant: 'normal',
+        }
+      });
       const link = document.createElement('a');
-      link.href = url;
+      link.href = dataUrl;
       link.download = `salermoon_capture_${new Date().getTime()}.png`;
       link.click();
     } catch (err) {
@@ -1597,26 +1738,23 @@ export default function Home() {
   const handleCopyClipboard = useCallback(async () => {
     if (!resultAreaRef.current) return;
     try {
-      const canvas = await html2canvas(resultAreaRef.current, {
-        useCORS: true,
-        scale: 2,
+      const blob = await toBlob(resultAreaRef.current, {
+        cacheBust: true,
         backgroundColor: theme === 'dark' ? '#0f172a' : '#f8fafc',
-      } as any);
-      canvas.toBlob(async (blob) => {
-        if (!blob) return;
-        try {
-          await navigator.clipboard.write([ 
-            new ClipboardItem({ 'image/png': blob })
-          ]);
-          alert('클립보드에 복사되었습니다!');
-        } catch (err) {
-          console.error(err);
-          alert('클립보드 복사에 실패했습니다. 브라우저 설정을 확인해주세요.');
+        style: {
+          fontVariant: 'normal',
         }
       });
+      
+      if (!blob) throw new Error('Blob creation failed');
+
+      await navigator.clipboard.write([ 
+        new ClipboardItem({ 'image/png': blob })
+      ]);
+      alert('클립보드에 복사되었습니다!');
     } catch (err) {
       console.error(err);
-      alert('이미지 생성에 실패했습니다.');
+      alert('클립보드 복사에 실패했습니다. 브라우저 설정을 확인해주세요.');
     }
   }, [theme]);
 
@@ -1863,7 +2001,11 @@ export default function Home() {
               )}
 
               <section className="mt-4">
-                <ProductListArea items={displayedItems} viewMode={viewMode} />
+                <ProductListArea 
+                  items={displayedItems} 
+                  viewMode={viewMode} 
+                  onGroupClick={setSelectedGroup}
+                />
                 
                 {displayedItems.length < processedItems.length && (
                   <div className="text-center text-sm text-[var(--color-text-secondary)] mt-4">
