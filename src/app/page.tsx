@@ -1060,15 +1060,13 @@ function IdleState() {
 }
 
 /** 검색 요약 패널 */
-function SearchSummaryPanel({
+function SearchSummaryPanel({ 
   result,
-  appliedFilters
+  appliedFilters 
 }: {
   result: SearchResult;
   appliedFilters: AppliedFilters;
 }) {
-  const isLimitReached = result.totalFromApi >= 1000;
-
   return (
     <div className="info-panel">
       <div className="info-panel-header">
@@ -1083,18 +1081,9 @@ function SearchSummaryPanel({
           </div>
           <div className="flex justify-between">
             <span className="text-[var(--color-text-secondary)]">API 결과</span>
-            <span className="font-medium">
-              {formatPrice(result.totalFromApi)}개
-              {isLimitReached && " (MAX)"}
-            </span>
+            <span className="font-medium">{formatPrice(result.totalFromApi)}개</span>
           </div>
-          {isLimitReached && (
-            <div className="text-[10px] text-[var(--color-warning)] bg-[rgba(245,158,11,0.1)] p-1.5 rounded mt-1">
-              ⚠️ 네이버 API 제한으로 1000개까지만 수집되었습니다.
-              {result.allItems.length < 1000 && " 더 많은 결과를 위해 가격대별 검색을 권장합니다."}
-            </div>
-          )}
-          <div className="flex justify-between mt-2">
+          <div className="flex justify-between">
             <span className="text-[var(--color-text-secondary)]">필터 후</span>
             <span className="font-medium text-[var(--color-primary)]">{formatPrice(result.totalCandidates)}개</span>
           </div>
