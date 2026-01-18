@@ -4,6 +4,7 @@ import { useState, useCallback, useEffect, useRef, useMemo } from "react";
 import Image from "next/image";
 import { useSearchHistory, SearchHistoryParams, SearchHistoryItem } from "@/hooks/useSearchHistory";
 import { toPng, toBlob } from "html-to-image";
+import PriceHistogram from "@/components/PriceHistogram";
 
 // ==================== 타입 정의 ====================
 interface Item {
@@ -1568,6 +1569,7 @@ export default function Home() {
   const [selectedMalls, setSelectedMalls] = useState<string[]>([]);
   const [clientSort, setClientSort] = useState<SortOption>("asc");
   const [selectedGroup, setSelectedGroup] = useState<PriceGroup | null>(null);
+  const [histogramRange, setHistogramRange] = useState<{ min: number; max: number } | null>(null);
 
   // 검색 히스토리
   const { history, isAvailable: historyAvailable, addHistory, removeHistory, clearHistory } = useSearchHistory();
@@ -1582,7 +1584,7 @@ export default function Home() {
     return Array.from(mallSet).sort();
   }, [result]);
 
-  const processedItems = useMemo(() => {
+  const baseItems = useMemo(() => {
     if (!result) return [];
     let items = [...result.allItems];
 
@@ -1592,6 +1594,15 @@ export default function Home() {
 
     if (excludeOutliers) {
       items = filterOutliers(items);
+    }
+    return items;
+  }, [result, selectedMalls, excludeOutliers]);
+
+  const processedItems = useMemo(() => {
+    let items = [...baseItems];
+
+    if (histogramRange) {
+      items = items.filter((item) => item.lprice >= histogramRange.min && item.lprice <= histogramRange.max);
     }
 
     switch (clientSort) {
@@ -1606,7 +1617,7 @@ export default function Home() {
     }
 
     return items;
-  }, [result, selectedMalls, excludeOutliers, clientSort]);
+  }, [baseItems, histogramRange, clientSort]);
 
   const displayedItems = processedItems.slice(0, displayCount);
 
@@ -1635,7 +1646,7 @@ export default function Home() {
       return { effectiveTop1: null, effectiveTop10Groups: [], effectivePriceBand: null };
     }
 
-    if (selectedMalls.length === 0 && !excludeOutliers) {
+    if (selectedMalls.length === 0 && !excludeOutliers && !histogramRange) {
       return {
         effectiveTop1: result.top1,
         effectiveTop10Groups: result.top10Groups,
@@ -1643,12 +1654,11 @@ export default function Home() {
       };
     }
 
-    let filteredItems = result.allItems;
-    if (selectedMalls.length > 0) {
-      filteredItems = filteredItems.filter((item) => selectedMalls.includes(item.mallName));
-    }
-    if (excludeOutliers) {
-      filteredItems = filterOutliers(filteredItems);
+    let filteredItems = [...baseItems];
+    if (histogramRange) {
+      filteredItems = filteredItems.filter(
+        (item) => item.lprice >= histogramRange.min && item.lprice <= histogramRange.max
+      );
     }
 
     const sorted = [...filteredItems].sort((a, b) => a.lprice - b.lprice);
@@ -1697,7 +1707,7 @@ export default function Home() {
     }
 
     return { effectiveTop1: top1, effectiveTop10Groups: groups, effectivePriceBand: priceBand };
-  }, [result, selectedMalls, excludeOutliers]);
+  }, [result, baseItems, histogramRange, selectedMalls, excludeOutliers]);
 
   const comparison = useMemo(() => {
     if (targetPrice > 0 && effectiveTop1) {
@@ -1758,6 +1768,14 @@ export default function Home() {
     }
   }, [theme]);
 
+  const handleHistogramSelect = useCallback((min: number, max: number) => {
+    if (min === 0 && max === 0) {
+      setHistogramRange(null);
+      return;
+    }
+    setHistogramRange({ min, max });
+  }, []);
+
   const handleSearch = useCallback(async () => {
     if (!query.trim()) {
       setErrorMessage("검색어를 입력해주세요");
@@ -1769,6 +1787,7 @@ export default function Home() {
     setErrorMessage("");
     setSelectedMalls([]);
     setExcludeOutliers(false);
+    setHistogramRange(null);
 
     try {
       const params = new URLSearchParams({
@@ -1832,6 +1851,7 @@ export default function Home() {
       setErrorMessage("");
       setSelectedMalls([]);
       setExcludeOutliers(false);
+      setHistogramRange(null);
 
       try {
         const searchParams = new URLSearchParams({
@@ -1969,6 +1989,12 @@ export default function Home() {
                   <TargetPriceComparisonCard comparison={comparison} />
                 </section>
               )}
+
+              <PriceHistogram
+                items={baseItems}
+                selectedRange={histogramRange}
+                onSelectRange={handleHistogramSelect}
+              />
 
               <ResultsHeader
                 viewMode={viewMode}
