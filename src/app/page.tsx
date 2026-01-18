@@ -226,51 +226,109 @@ function useTheme() {
 // ==================== 컴포넌트 ====================
 
 /** 1개 단가 계산 카드 */
-function UnitPriceCard({ item }: { item: Item }) {
+function UnitPriceCard({ items }: { items: Item[] }) {
   const [qty, setQty] = useState(1);
-  const unitPrice = Math.floor(item.lprice / qty);
+  
+  const stats = useMemo(() => {
+    if (items.length === 0) return null;
+    
+    const prices = items.map(item => item.lprice).sort((a, b) => a - b);
+    const sum = prices.reduce((a, b) => a + b, 0);
+    const mid = Math.floor(prices.length / 2);
+    
+    // 통계값 계산
+    const minPrice = prices[0];
+    const medianPrice = prices.length % 2 === 0
+      ? Math.round((prices[mid - 1] + prices[mid]) / 2)
+      : prices[mid];
+    const avgPrice = Math.round(sum / prices.length);
+    
+    // 추천 단가: 하위 25% 지점 (Q1) - 합리적인 저렴한 가격선
+    const q1Index = Math.floor(prices.length * 0.25);
+    const recommendedPrice = prices[q1Index];
+
+    return {
+      min: minPrice,
+      median: medianPrice,
+      avg: avgPrice,
+      recommend: recommendedPrice
+    };
+  }, [items]);
 
   const handleQtyChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const val = parseInt(e.target.value, 10);
     setQty(isNaN(val) || val < 1 ? 1 : val);
   };
 
+  if (!stats) return null;
+
+  const unitMin = Math.floor(stats.min / qty);
+  const unitMedian = Math.floor(stats.median / qty);
+  const unitAvg = Math.floor(stats.avg / qty);
+  const unitRecommend = Math.floor(stats.recommend / qty);
+
   return (
-    <div className="sidebar-card p-4">
-      <div className="flex items-center gap-2 mb-3">
-        <span className="text-xl">🧮</span>
-        <h3 className="text-sm font-bold">1개 단가 계산기</h3>
-      </div>
+    <div className="sidebar-card p-6 relative overflow-hidden border-2 border-[var(--color-primary)]/20">
+      <div className="absolute top-0 right-0 w-24 h-24 bg-[var(--color-primary)]/10 rounded-full blur-2xl -mr-8 -mt-8 pointer-events-none"></div>
       
-      <div className="flex items-center justify-between gap-2 mb-3">
-        <label className="text-xs text-[var(--color-text-secondary)]">묶음 수량</label>
-        <div className="flex items-center gap-1">
-          <input 
-            type="number" 
-            min="1"
-            value={qty} 
-            onChange={handleQtyChange} 
-            className="input-field-sm w-16 text-right"
-          />
-          <span className="text-xs">개</span>
+      <div className="flex items-center gap-2 mb-6">
+        <div className="w-8 h-8 bg-[var(--color-primary)] rounded-lg flex items-center justify-center text-white">
+          <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+            <path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path>
+            <path d="M12 22V12"></path>
+            <polyline points="3.29 7 12 12 20.71 7"></polyline>
+            <path d="m7.5 4.27 9 5.15"></path>
+          </svg>
+        </div>
+        <div>
+          <h2 className="text-lg font-black text-[var(--color-text)] tracking-tight leading-none">1개당 단가</h2>
+          <span className="px-2 py-0.5 bg-[var(--color-primary)]/10 text-[var(--color-primary)] rounded-md text-[10px] font-black inline-block mt-1">UNIT PRICE</span>
         </div>
       </div>
 
-      <div className="pt-3 border-t border-[var(--color-border)]">
-        <div className="flex justify-between items-end">
-          <span className="text-xs text-[var(--color-text-secondary)]">개당 단가</span>
-          <div>
-            <span className="text-xl font-bold text-[var(--color-accent-dark)]">
-              {formatPrice(unitPrice)}
-            </span>
-            <span className="text-sm ml-1">원</span>
+      <div className="mb-4">
+        <div className="flex items-center justify-between gap-2 p-3 bg-[var(--color-background)] rounded-lg border border-[var(--color-border)]">
+          <label className="text-xs font-bold text-[var(--color-text-secondary)]">묶음 수량 설정</label>
+          <div className="flex items-center gap-1">
+            <input 
+              type="number" 
+              min="1"
+              value={qty} 
+              onChange={handleQtyChange} 
+              className="w-16 text-right bg-transparent font-bold border-b border-[var(--color-border)] focus:outline-none focus:border-[var(--color-primary)]"
+            />
+            <span className="text-xs font-bold text-[var(--color-text-secondary)]">개</span>
           </div>
         </div>
       </div>
-      
-      <p className="text-[10px] text-[var(--color-text-secondary)] mt-2 text-right">
-        * 배송비 제외 기준
-      </p>
+
+      <div className="space-y-3">
+        <div className="flex justify-between items-center group">
+          <span className="text-sm font-bold text-[var(--color-text-secondary)]">최저 단가</span>
+          <span className="text-xl font-black text-[var(--color-primary)] tracking-tight">{formatPrice(unitMin)}원</span>
+        </div>
+        <div className="flex justify-between items-center group">
+          <span className="text-sm font-bold text-[var(--color-text-secondary)]">중앙 단가</span>
+          <span className="text-lg font-black text-[var(--color-text)] tracking-tight">{formatPrice(unitMedian)}원</span>
+        </div>
+        <div className="flex justify-between items-center group">
+          <span className="text-sm font-bold text-[var(--color-text-secondary)]">평균 단가</span>
+          <span className="text-lg font-black text-[var(--color-text)] tracking-tight">{formatPrice(unitAvg)}원</span>
+        </div>
+        
+        <div className="pt-3 mt-3 border-t border-[var(--color-primary)]/10">
+          <div className="flex justify-between items-center mb-1">
+            <span className="flex items-center gap-1.5 text-xs font-black text-[var(--color-primary)] uppercase tracking-widest">
+              <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"></path>
+              </svg>
+              추천 단가
+            </span>
+            <span className="text-2xl font-black text-[var(--color-primary)] tracking-tighter">{formatPrice(unitRecommend)}원</span>
+          </div>
+          <p className="text-[10px] font-bold text-[var(--color-text-secondary)] text-right">수량 대비 가장 합리적인 1개당 가격입니다.</p>
+        </div>
+      </div>
     </div>
   );
 }
@@ -1816,7 +1874,7 @@ export default function Home() {
         </div>
 
             <aside className="sidebar">
-              {effectiveTop1 && <UnitPriceCard item={effectiveTop1} />}
+              {processedItems.length > 0 && <UnitPriceCard items={processedItems} />}
               <Top10Sidebar
                 groups={effectiveTop10Groups}
                 priceBand={effectivePriceBand}
