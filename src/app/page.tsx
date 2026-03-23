@@ -418,8 +418,7 @@ function ExcludeOptionsCompact({
   };
 
   return (
-    <div className="flex items-center gap-3 flex-wrap">
-      <span className="text-xs font-medium">제외:</span>
+    <div className="flex flex-wrap gap-x-3 gap-y-1">
         {EXCLUDE_OPTIONS.map((option) => (
         <label key={option.value} className="checkbox-wrapper-compact">
             <input
@@ -1895,35 +1894,25 @@ export default function Home() {
 
   return (
     <main className="min-h-screen bg-pattern">
-      <div className="max-w-screen-2xl mx-auto px-3 md:px-6 py-3 md:py-6">
-        {/* 헤더 */}
-        <header className="flex items-center justify-between mb-4">
-          <div className="flex-1" />
-          <div className="text-center">
-            <h1 className="text-xl md:text-2xl font-black">
-            <span className="bg-gradient-to-r from-[var(--color-primary)] via-[var(--color-secondary)] to-[var(--color-accent)] bg-clip-text text-transparent">
-              🌙 세일러문
-            </span>
-          </h1>
-            <p className="text-xs text-[var(--color-text-secondary)]">
-              시장 최저가 검색
-          </p>
+      {/* 스티키 상단 네비게이션 */}
+      <header className="sticky-nav">
+        <div className="sticky-nav-inner">
+          <div className="sticky-nav-logo">
+            <h1 className="text-xl font-black leading-none">
+              <span className="bg-gradient-to-r from-[var(--color-primary)] via-[var(--color-secondary)] to-[var(--color-accent)] bg-clip-text text-transparent">
+                세일러문
+              </span>
+            </h1>
+            <p className="text-[10px] text-[var(--color-text-secondary)] mt-0.5">시장 최저가 검색</p>
           </div>
-          <div className="flex-1 flex justify-end">
-            {mounted && <ThemeToggle theme={theme} onToggle={toggleTheme} />}
-          </div>
-        </header>
 
-        {/* 검색 폼 (컴팩트) */}
-        <div className="search-form-compact">
-          {/* 1행: 검색어 + 버튼 */}
-          <div className="flex gap-2">
+          <div className="sticky-nav-search">
             <input
               type="text"
               value={query}
               onChange={(e) => setQuery(e.target.value)}
               onKeyDown={handleKeyDown}
-              placeholder="검색어 입력"
+              placeholder="검색어를 입력하세요"
               className="input-field-compact flex-1"
               disabled={loadingState === "loading"}
             />
@@ -1932,23 +1921,85 @@ export default function Home() {
               disabled={loadingState === "loading"}
               className="btn-primary-compact"
             >
-              {loadingState === "loading" ? "검색중" : "검색"}
+              {loadingState === "loading" ? (
+                <span className="flex items-center gap-1.5">
+                  <svg className="animate-spin" width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="12" cy="12" r="10" strokeDasharray="31.4 31.4" strokeDashoffset="10" />
+                  </svg>
+                  검색중
+                </span>
+              ) : (
+                <span className="flex items-center gap-1.5">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                    <circle cx="11" cy="11" r="8" />
+                    <line x1="21" y1="21" x2="16.65" y2="16.65" />
+                  </svg>
+                  검색
+                </span>
+              )}
             </button>
           </div>
 
-          {/* 2행: 가격 필터 + 제외 옵션 */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2">
-            <PriceInputCompact label="최소" value={minPrice} onChange={setMinPrice} placeholder="제한없음" />
-            <PriceInputCompact label="최대" value={maxPrice} onChange={setMaxPrice} placeholder="제한없음" />
-            <PriceInputCompact label="목표가" value={targetPrice} onChange={setTargetPrice} placeholder="비교용" />
-            <div className="h-4 w-px bg-[var(--color-border)] hidden md:block" />
-            <ExcludeOptionsCompact selected={exclude} onChange={setExclude} />
+          <div className="sticky-nav-actions">
+            {mounted && <ThemeToggle theme={theme} onToggle={toggleTheme} />}
           </div>
+        </div>
+      </header>
 
-          {/* 3행: 수집 범위 + 노이즈 필터 */}
-          <div className="flex flex-wrap items-center gap-x-4 gap-y-2 mt-2 pt-2 border-t border-[var(--color-border)]">
-            <PagesSelectCompact value={pages} onChange={setPages} />
-            <ToggleSwitchCompact checked={filterNoise} onChange={setFilterNoise} label="노이즈 제외" />
+      {/* 3열 본문 레이아웃 */}
+      <div className="three-col-layout">
+        {/* 좌측 사이드바: 필터 */}
+        <aside className="left-sidebar">
+          <div className="sidebar-card">
+            <div className="sidebar-header">
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <line x1="4" y1="21" x2="4" y2="14" />
+                <line x1="4" y1="10" x2="4" y2="3" />
+                <line x1="12" y1="21" x2="12" y2="12" />
+                <line x1="12" y1="8" x2="12" y2="3" />
+                <line x1="20" y1="21" x2="20" y2="16" />
+                <line x1="20" y1="12" x2="20" y2="3" />
+                <line x1="1" y1="14" x2="7" y2="14" />
+                <line x1="9" y1="8" x2="15" y2="8" />
+                <line x1="17" y1="16" x2="23" y2="16" />
+              </svg>
+              <span className="text-sm font-bold">검색 필터</span>
+            </div>
+            <div className="p-3 flex flex-col gap-3">
+              {/* 가격 범위 */}
+              <div>
+                <span className="filter-section-title">가격 범위</span>
+                <div className="flex flex-col gap-2">
+                  <PriceInputCompact label="최소" value={minPrice} onChange={setMinPrice} placeholder="제한없음" />
+                  <PriceInputCompact label="최대" value={maxPrice} onChange={setMaxPrice} placeholder="제한없음" />
+                </div>
+              </div>
+
+              {/* 목표가 */}
+              <div className="border-t border-[var(--color-border)] pt-3">
+                <span className="filter-section-title">목표가</span>
+                <PriceInputCompact label="" value={targetPrice} onChange={setTargetPrice} placeholder="비교용 목표가" />
+              </div>
+
+              {/* 제외 옵션 */}
+              <div className="border-t border-[var(--color-border)] pt-3">
+                <span className="filter-section-title">제외 옵션</span>
+                <div className="flex flex-col gap-1">
+                  <ExcludeOptionsCompact selected={exclude} onChange={setExclude} />
+                </div>
+              </div>
+
+              {/* 수집 범위 */}
+              <div className="border-t border-[var(--color-border)] pt-3">
+                <span className="filter-section-title">수집 범위</span>
+                <PagesSelectCompact value={pages} onChange={setPages} />
+              </div>
+
+              {/* 노이즈 필터 */}
+              <div className="border-t border-[var(--color-border)] pt-3">
+                <ToggleSwitchCompact checked={filterNoise} onChange={setFilterNoise} label="노이즈 제외" />
+              </div>
+            </div>
           </div>
 
           {/* 검색 히스토리 */}
@@ -1962,17 +2013,17 @@ export default function Home() {
               onClear={clearHistory}
             />
           )}
-        </div>
+        </aside>
 
-        {/* 결과 영역 */}
+        {/* 메인 콘텐츠 */}
+        <div className="main-content" ref={resultAreaRef}>
           {loadingState === "idle" && <IdleState />}
           {loadingState === "loading" && <LoadingState />}
           {loadingState === "error" && <ErrorState message={errorMessage} />}
-        {loadingState === "success" && result && result.totalCandidates === 0 && <EmptyState />}
+          {loadingState === "success" && result && result.totalCandidates === 0 && <EmptyState />}
 
-        {hasResults && (
-          <div className="main-layout">
-            <div className="main-content" ref={resultAreaRef}>
+          {hasResults && (
+            <>
               {result.filterRelaxed && (
                 <RelaxationBanner
                   appliedRelaxation={result.appliedRelaxation}
@@ -2027,48 +2078,51 @@ export default function Home() {
               )}
 
               <section className="mt-4">
-                <ProductListArea 
-                  items={displayedItems} 
-                  viewMode={viewMode} 
+                <ProductListArea
+                  items={displayedItems}
+                  viewMode={viewMode}
                   onGroupClick={setSelectedGroup}
                 />
-                
+
                 {displayedItems.length < processedItems.length && (
                   <div className="text-center text-sm text-[var(--color-text-secondary)] mt-4">
                     {processedItems.length - displayedItems.length}개 상품이 더 있습니다.
                   </div>
                 )}
               </section>
+            </>
+          )}
         </div>
 
-            <aside className="sidebar">
-              {processedItems.length > 0 && <UnitPriceCard items={processedItems} />}
-              <Top10Sidebar
-                groups={effectiveTop10Groups}
-                priceBand={effectivePriceBand}
-                onGroupClick={setSelectedGroup}
-              />
-              <SearchSummaryPanel result={result} appliedFilters={result.appliedFilters} />
-            </aside>
-          </div>
+        {/* 우측 사이드바: 분석 */}
+        {hasResults && (
+          <aside className="right-sidebar">
+            {processedItems.length > 0 && <UnitPriceCard items={processedItems} />}
+            <Top10Sidebar
+              groups={effectiveTop10Groups}
+              priceBand={effectivePriceBand}
+              onGroupClick={setSelectedGroup}
+            />
+            <SearchSummaryPanel result={result} appliedFilters={result.appliedFilters} />
+          </aside>
         )}
-
-        {selectedGroup && (
-          <PriceGroupModal group={selectedGroup} onClose={() => setSelectedGroup(null)} />
-        )}
-
-        <footer className="text-center mt-8 text-xs text-[var(--color-text-secondary)]">
-            <a
-              href="https://developers.naver.com/docs/serviceapi/search/shopping/shopping.md"
-              target="_blank"
-              rel="noopener noreferrer"
-              className="underline hover:text-[var(--color-primary)]"
-            >
-              네이버 쇼핑 API
-            </a>
-            를 활용한 최저가 검색 서비스
-        </footer>
       </div>
+
+      {selectedGroup && (
+        <PriceGroupModal group={selectedGroup} onClose={() => setSelectedGroup(null)} />
+      )}
+
+      <footer className="text-center py-6 text-xs text-[var(--color-text-secondary)]">
+        <a
+          href="https://developers.naver.com/docs/serviceapi/search/shopping/shopping.md"
+          target="_blank"
+          rel="noopener noreferrer"
+          className="underline hover:text-[var(--color-primary)]"
+        >
+          네이버 쇼핑 API
+        </a>
+        를 활용한 최저가 검색 서비스
+      </footer>
     </main>
   );
 }
