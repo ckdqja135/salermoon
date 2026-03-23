@@ -263,10 +263,10 @@ function UnitPriceCard({ items }: { items: Item[] }) {
   const unitRecommend = stats.recommend;
 
   return (
-    <div className="sidebar-card p-6 relative overflow-hidden border-2 border-[var(--color-primary)]/20">
+    <div className="sidebar-card p-7 relative overflow-hidden border-2 border-[var(--color-primary)]/20">
       <div className="absolute top-0 right-0 w-24 h-24 bg-[var(--color-primary)]/10 rounded-full blur-2xl -mr-8 -mt-8 pointer-events-none"></div>
-      
-      <div className="flex items-center gap-2 mb-6">
+
+      <div className="flex items-center gap-3 mb-7">
         <div className="w-8 h-8 bg-[var(--color-primary)] rounded-lg flex items-center justify-center text-white">
           <svg xmlns="http://www.w3.org/2000/svg" width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
             <path d="M11 21.73a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73z"></path>
@@ -281,7 +281,7 @@ function UnitPriceCard({ items }: { items: Item[] }) {
         </div>
       </div>
 
-      <div className="space-y-3">
+      <div className="space-y-4">
         <div className="flex justify-between items-center group">
           <span className="text-sm font-bold text-[var(--color-text-secondary)]">최저 단가</span>
           <span className="text-xl font-black text-[var(--color-primary)] tracking-tight">{formatPrice(unitMin)}원</span>
@@ -294,9 +294,9 @@ function UnitPriceCard({ items }: { items: Item[] }) {
           <span className="text-sm font-bold text-[var(--color-text-secondary)]">평균 단가</span>
           <span className="text-lg font-black text-[var(--color-text)] tracking-tight">{formatPrice(unitAvg)}원</span>
         </div>
-        
-        <div className="pt-3 mt-3 border-t border-[var(--color-primary)]/10">
-          <div className="flex justify-between items-center mb-1">
+
+        <div className="pt-4 mt-4 border-t border-[var(--color-primary)]/10">
+          <div className="flex justify-between items-center mb-2">
             <span className="flex items-center gap-1.5 text-xs font-black text-[var(--color-primary)] uppercase tracking-widest">
               <svg xmlns="http://www.w3.org/2000/svg" width="12" height="12" viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
                 <path d="M11.525 2.295a.53.53 0 0 1 .95 0l2.31 4.679a2.123 2.123 0 0 0 1.595 1.16l5.166.756a.53.53 0 0 1 .294.904l-3.736 3.638a2.123 2.123 0 0 0-.611 1.878l.882 5.14a.53.53 0 0 1-.771.56l-4.618-2.428a2.122 2.122 0 0 0-1.973 0L6.396 21.01a.53.53 0 0 1-.77-.56l.881-5.139a2.122 2.122 0 0 0-.611-1.879L2.16 9.795a.53.53 0 0 1 .294-.906l5.165-.755a2.122 2.122 0 0 0 1.597-1.16z"></path>
@@ -305,7 +305,7 @@ function UnitPriceCard({ items }: { items: Item[] }) {
             </span>
             <span className="text-2xl font-black text-[var(--color-primary)] tracking-tighter">{formatPrice(unitRecommend)}원</span>
           </div>
-          <p className="text-[10px] font-bold text-[var(--color-text-secondary)] text-right">수량 대비 가장 합리적인 1개당 가격입니다.</p>
+          <p className="text-[10px] font-bold text-[var(--color-text-secondary)] text-right mt-1">수량 대비 가장 합리적인 1개당 가격입니다.</p>
         </div>
       </div>
     </div>
@@ -688,6 +688,8 @@ function SearchHistoryPanel({
         type="button"
         onClick={onToggle}
         className="search-history-toggle"
+        aria-expanded={isOpen}
+        aria-controls="search-history-list"
       >
         <span className="flex items-center gap-1.5">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -711,7 +713,7 @@ function SearchHistoryPanel({
       </button>
 
       {isOpen && (
-        <div className="search-history-list">
+        <div className="search-history-list" id="search-history-list">
           <div className="search-history-header">
             <span className="text-xs text-[var(--color-text-secondary)]">
               최근 {history.length}개 검색
@@ -944,11 +946,12 @@ function GridViewItem({ item }: { item: Item }) {
           className="text-sm font-medium line-clamp-2 mb-1"
           dangerouslySetInnerHTML={{ __html: item.title }}
         />
-        <p className="text-xs text-[var(--color-text-secondary)] mb-2 line-clamp-1">
-          {item.mallName}
-        </p>
-        <div className="text-right">
-          <span className="price">{formatPrice(item.lprice)}</span>
+        <div className="flex items-center gap-1 mb-2">
+          <span className="mall-badge">{item.mallName}</span>
+          {item.brand && <span className="brand-badge">{item.brand}</span>}
+        </div>
+        <div>
+          <span className="price text-lg">{formatPrice(item.lprice)}</span>
           <span className="text-sm">원</span>
         </div>
       </div>
@@ -1016,12 +1019,13 @@ function ViewModeToggle({
   onChange: (mode: ViewMode) => void;
 }) {
   return (
-    <div className="view-mode-toggle">
+    <div className="view-mode-toggle" role="group" aria-label="보기 방식">
       <button
         type="button"
         onClick={() => onChange("list")}
         className={`view-mode-btn ${viewMode === "list" ? "active" : ""}`}
-        title="리스트 뷰"
+        aria-pressed={viewMode === "list"}
+        aria-label="리스트 뷰"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <line x1="3" y1="6" x2="21" y2="6"></line>
@@ -1033,7 +1037,8 @@ function ViewModeToggle({
         type="button"
         onClick={() => onChange("grid")}
         className={`view-mode-btn ${viewMode === "grid" ? "active" : ""}`}
-        title="그리드 뷰"
+        aria-pressed={viewMode === "grid"}
+        aria-label="그리드 뷰"
       >
         <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
           <rect x="3" y="3" width="7" height="7"></rect>
@@ -1046,14 +1051,35 @@ function ViewModeToggle({
   );
 }
 
-/** 로딩 상태 */
+/** 스켈레톤 블록 */
+function SkeletonBlock({ className }: { className?: string }) {
+  return <div className={`skeleton-pulse rounded-lg ${className ?? ""}`} />;
+}
+
+/** 로딩 상태 (스켈레톤) */
 function LoadingState() {
   return (
-    <div className="flex flex-col items-center justify-center py-16 gap-4">
-      <div className="spinner" />
-      <p className="text-[var(--color-text-secondary)]">
-        최저가 상품을 찾고 있어요...
-      </p>
+    <div className="space-y-4 fade-in" role="status" aria-label="검색 결과 로딩 중">
+      {/* 상단 통계 스켈레톤 */}
+      <div className="card-static p-5">
+        <div className="flex items-center gap-3 mb-4">
+          <SkeletonBlock className="w-8 h-8 rounded-full" />
+          <SkeletonBlock className="h-5 w-32" />
+        </div>
+        <SkeletonBlock className="h-[80px] w-full rounded-xl" />
+      </div>
+      {/* 상품 리스트 스켈레톤 */}
+      {[1, 2, 3, 4, 5].map((i) => (
+        <div key={i} className="card-static p-4 flex items-center gap-4" style={{ animationDelay: `${i * 0.05}s` }}>
+          <SkeletonBlock className="w-12 h-12 rounded-lg flex-shrink-0" />
+          <div className="flex-1 space-y-2">
+            <SkeletonBlock className="h-4 w-3/4" />
+            <SkeletonBlock className="h-3 w-1/3" />
+          </div>
+          <SkeletonBlock className="h-5 w-20 flex-shrink-0" />
+        </div>
+      ))}
+      <p className="sr-only">최저가 상품을 찾고 있어요...</p>
     </div>
   );
 }
@@ -1116,7 +1142,7 @@ function SearchSummaryPanel({
         <span className="text-xs font-semibold">검색 요약</span>
       </div>
       <div className="info-panel-content">
-        <div className="text-xs space-y-1.5">
+        <div className="text-xs space-y-2.5">
           <div className="flex justify-between">
             <span className="text-[var(--color-text-secondary)]">검색어</span>
             <span className="font-medium truncate ml-2">{result.query}</span>
@@ -1129,15 +1155,15 @@ function SearchSummaryPanel({
             <span className="text-[var(--color-text-secondary)]">필터 후</span>
             <span className="font-medium text-[var(--color-primary)]">{formatPrice(result.totalCandidates)}개</span>
           </div>
-        {result.excludedByKeywordsCount > 0 && (
+          {result.excludedByKeywordsCount > 0 && (
             <div className="flex justify-between">
               <span className="text-[var(--color-text-secondary)]">키워드 제외</span>
               <span className="font-medium">{formatPrice(result.excludedByKeywordsCount)}개</span>
             </div>
-        )}
-      </div>
-        <div className="mt-3 pt-3 border-t border-[var(--color-border)]">
-          <div className="text-xs text-[var(--color-text-secondary)] space-y-1">
+          )}
+        </div>
+        <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
+          <div className="text-xs text-[var(--color-text-secondary)] space-y-2">
             <div>범위: {appliedFilters.pages}페이지</div>
             <div>노이즈필터: {appliedFilters.filterNoise ? "ON" : "OFF"}</div>
             <div>제외: {appliedFilters.exclude?.join(", ") || "없음"}</div>
@@ -1168,7 +1194,7 @@ function Top10Sidebar({
       </div>
       
       {priceBand && (
-        <div className="px-3 pb-2">
+        <div className="px-4 py-3">
           <PriceBandSummaryCard band={priceBand} />
         </div>
       )}
@@ -1183,7 +1209,7 @@ function Top10Sidebar({
               />
             ))}
           </div>
-      <div className="px-3 pb-3 text-xs text-center text-[var(--color-text-secondary)]">
+      <div className="px-4 py-4 text-xs text-center text-[var(--color-text-secondary)]">
         클릭하여 상세 보기
       </div>
     </div>
@@ -1574,6 +1600,9 @@ export default function Home() {
   const { history, isAvailable: historyAvailable, addHistory, removeHistory, clearHistory } = useSearchHistory();
   const [isHistoryOpen, setIsHistoryOpen] = useState(false);
 
+  // 모바일 필터 토글
+  const [isFilterOpen, setIsFilterOpen] = useState(false);
+
   // 캡쳐 참조
   const resultAreaRef = useRef<HTMLDivElement>(null);
 
@@ -1915,6 +1944,7 @@ export default function Home() {
               placeholder="검색어를 입력하세요"
               className="input-field-compact flex-1"
               disabled={loadingState === "loading"}
+              aria-label="상품 검색어 입력"
             />
             <button
               onClick={handleSearch}
@@ -1951,53 +1981,74 @@ export default function Home() {
         {/* 좌측 사이드바: 필터 */}
         <aside className="left-sidebar">
           <div className="sidebar-card">
-            <div className="sidebar-header">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <line x1="4" y1="21" x2="4" y2="14" />
-                <line x1="4" y1="10" x2="4" y2="3" />
-                <line x1="12" y1="21" x2="12" y2="12" />
-                <line x1="12" y1="8" x2="12" y2="3" />
-                <line x1="20" y1="21" x2="20" y2="16" />
-                <line x1="20" y1="12" x2="20" y2="3" />
-                <line x1="1" y1="14" x2="7" y2="14" />
-                <line x1="9" y1="8" x2="15" y2="8" />
-                <line x1="17" y1="16" x2="23" y2="16" />
+            <button
+              type="button"
+              className="sidebar-header sidebar-header-toggle"
+              onClick={() => setIsFilterOpen(!isFilterOpen)}
+              aria-expanded={isFilterOpen}
+              aria-controls="filter-panel"
+            >
+              <div className="flex items-center gap-2">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <line x1="4" y1="21" x2="4" y2="14" />
+                  <line x1="4" y1="10" x2="4" y2="3" />
+                  <line x1="12" y1="21" x2="12" y2="12" />
+                  <line x1="12" y1="8" x2="12" y2="3" />
+                  <line x1="20" y1="21" x2="20" y2="16" />
+                  <line x1="20" y1="12" x2="20" y2="3" />
+                  <line x1="1" y1="14" x2="7" y2="14" />
+                  <line x1="9" y1="8" x2="15" y2="8" />
+                  <line x1="17" y1="16" x2="23" y2="16" />
+                </svg>
+                <span className="text-sm font-bold">검색 필터</span>
+              </div>
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                className={`filter-toggle-chevron transition-transform ${isFilterOpen ? "rotate-180" : ""}`}
+              >
+                <polyline points="6,9 12,15 18,9" />
               </svg>
-              <span className="text-sm font-bold">검색 필터</span>
-            </div>
-            <div className="p-3 flex flex-col gap-3">
-              {/* 가격 범위 */}
-              <div>
-                <span className="filter-section-title">가격 범위</span>
-                <div className="flex flex-col gap-2">
-                  <PriceInputCompact label="최소" value={minPrice} onChange={setMinPrice} placeholder="제한없음" />
-                  <PriceInputCompact label="최대" value={maxPrice} onChange={setMaxPrice} placeholder="제한없음" />
+            </button>
+            <div id="filter-panel" className={`filter-panel-body ${isFilterOpen ? "open" : ""}`}>
+              <div className="p-3 flex flex-col gap-3">
+                {/* 가격 범위 */}
+                <div>
+                  <span className="filter-section-title">가격 범위</span>
+                  <div className="flex flex-col gap-2">
+                    <PriceInputCompact label="최소" value={minPrice} onChange={setMinPrice} placeholder="제한없음" />
+                    <PriceInputCompact label="최대" value={maxPrice} onChange={setMaxPrice} placeholder="제한없음" />
+                  </div>
                 </div>
-              </div>
 
-              {/* 목표가 */}
-              <div className="border-t border-[var(--color-border)] pt-3">
-                <span className="filter-section-title">목표가</span>
-                <PriceInputCompact label="" value={targetPrice} onChange={setTargetPrice} placeholder="비교용 목표가" />
-              </div>
-
-              {/* 제외 옵션 */}
-              <div className="border-t border-[var(--color-border)] pt-3">
-                <span className="filter-section-title">제외 옵션</span>
-                <div className="flex flex-col gap-1">
-                  <ExcludeOptionsCompact selected={exclude} onChange={setExclude} />
+                {/* 목표가 */}
+                <div className="border-t border-[var(--color-border)] pt-3">
+                  <span className="filter-section-title">목표가</span>
+                  <PriceInputCompact label="" value={targetPrice} onChange={setTargetPrice} placeholder="비교용 목표가" />
                 </div>
-              </div>
 
-              {/* 수집 범위 */}
-              <div className="border-t border-[var(--color-border)] pt-3">
-                <span className="filter-section-title">수집 범위</span>
-                <PagesSelectCompact value={pages} onChange={setPages} />
-              </div>
+                {/* 제외 옵션 */}
+                <div className="border-t border-[var(--color-border)] pt-3">
+                  <span className="filter-section-title">제외 옵션</span>
+                  <div className="flex flex-col gap-1">
+                    <ExcludeOptionsCompact selected={exclude} onChange={setExclude} />
+                  </div>
+                </div>
 
-              {/* 노이즈 필터 */}
-              <div className="border-t border-[var(--color-border)] pt-3">
-                <ToggleSwitchCompact checked={filterNoise} onChange={setFilterNoise} label="노이즈 제외" />
+                {/* 수집 범위 */}
+                <div className="border-t border-[var(--color-border)] pt-3">
+                  <span className="filter-section-title">수집 범위</span>
+                  <PagesSelectCompact value={pages} onChange={setPages} />
+                </div>
+
+                {/* 노이즈 필터 */}
+                <div className="border-t border-[var(--color-border)] pt-3">
+                  <ToggleSwitchCompact checked={filterNoise} onChange={setFilterNoise} label="노이즈 제외" />
+                </div>
               </div>
             </div>
           </div>
@@ -2016,7 +2067,7 @@ export default function Home() {
         </aside>
 
         {/* 메인 콘텐츠 */}
-        <div className="main-content" ref={resultAreaRef}>
+        <div className="main-content" ref={resultAreaRef} aria-live="polite">
           {loadingState === "idle" && <IdleState />}
           {loadingState === "loading" && <LoadingState />}
           {loadingState === "error" && <ErrorState message={errorMessage} />}

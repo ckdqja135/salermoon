@@ -122,10 +122,22 @@ export default function PriceHistogram({
       };
     }, [items]);
 
-  if (items.length === 0) return null;
+  if (items.length === 0) {
+    return (
+      <div className="bg-[var(--color-surface)] border border-[var(--color-border)]/50 rounded-2xl p-5 mb-4 text-center">
+        <p className="text-xs text-[var(--color-text-secondary)]">
+          가격 분포를 표시할 데이터가 없습니다.
+        </p>
+      </div>
+    );
+  }
 
   return (
-    <div className="bg-[var(--color-surface)] border border-[var(--color-border)]/50 rounded-2xl p-5 pb-4 mb-4">
+    <div
+      className="bg-[var(--color-surface)] border border-[var(--color-border)]/50 rounded-2xl p-5 pb-4 mb-4"
+      role="region"
+      aria-label="가격 분포 차트"
+    >
       {/* Header */}
       <div className="flex justify-between items-center mb-4">
         <div className="flex items-center gap-2">
@@ -140,6 +152,7 @@ export default function PriceHistogram({
           <button
             onClick={() => onSelectRange(0, 0)}
             className="text-[11px] text-[var(--color-text-secondary)] hover:text-[var(--color-text)] transition-colors duration-150"
+            aria-label="가격 필터 초기화"
           >
             초기화
           </button>
@@ -147,7 +160,7 @@ export default function PriceHistogram({
       </div>
 
       {/* Chart */}
-      <div className="relative h-[100px] flex items-end gap-[3px]">
+      <div className="relative h-[100px] flex items-end gap-[3px]" role="group" aria-label="가격 분포 막대 차트">
         {buckets.map((bucket, index) => {
           const isSelected =
             selectedRange &&
@@ -165,6 +178,15 @@ export default function PriceHistogram({
               onMouseEnter={() => setHoveredIndex(index)}
               onMouseLeave={() => setHoveredIndex(null)}
               onClick={() => onSelectRange(bucket.min, bucket.max)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectRange(bucket.min, bucket.max);
+                }
+              }}
+              tabIndex={0}
+              role="button"
+              aria-label={`${formatPrice(bucket.min)}~${formatPrice(bucket.max)}원: ${bucket.count}개${isSelected ? " (선택됨)" : ""}`}
             >
               <div
                 className={`
@@ -177,7 +199,7 @@ export default function PriceHistogram({
                   }
                 `}
                 style={{
-                  height: `${Math.max(heightPercent, 3)}%`,
+                  height: `${Math.max(heightPercent, 2)}%`,
                 }}
               />
 
@@ -198,13 +220,13 @@ export default function PriceHistogram({
       </div>
 
       {/* X-axis */}
-      <div className="flex justify-between mt-2.5 text-[10px] text-[var(--color-text-secondary)]/50 tabular-nums">
+      <div className="flex justify-between mt-2.5 text-[10px] text-[var(--color-text-secondary)] opacity-70 tabular-nums">
         <span>{formatPrice(overallMin)}원</span>
         <span>{formatPrice(overallMax)}원</span>
       </div>
 
       {/* Help */}
-      <p className="text-[10px] text-[var(--color-text-secondary)]/40 mt-2 text-center">
+      <p className="text-[10px] text-[var(--color-text-secondary)] opacity-50 mt-2 text-center">
         클릭하여 가격대 필터링
       </p>
     </div>
