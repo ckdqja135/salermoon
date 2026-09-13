@@ -1,18 +1,24 @@
 /**
- * 네이버 쇼핑 API 설정 상수
- * API 문서: https://developers.naver.com/docs/serviceapi/search/shopping/shopping.md
+ * 상품 검색/수집 설정 상수
+ *
+ * 수집 경로: 네이버 통합검색(where=shopping) — 종료된 쇼핑 오픈 API를 대체.
+ * 근거와 실측 한도: docs/crawling-feasibility.md
  */
 
-// ==================== API 설정 ====================
-export const NAVER_API_CONFIG = {
-  /** 네이버 쇼핑 검색 API 엔드포인트 */
-  ENDPOINT: "https://openapi.naver.com/v1/search/shop.json",
-  /** API 요청 타임아웃 (ms) */
-  TIMEOUT_MS: 3000,
-  /** 페이지당 아이템 수 (네이버 API 최대값: 100) */
-  DISPLAY_PER_PAGE: 100,
-  /** API 하루 호출 한도 */
-  DAILY_LIMIT: 25000,
+// ==================== 수집(크롤러) 설정 ====================
+export const CRAWLER_CONFIG = {
+  /** 통합검색 HTML 요청 타임아웃 (ms) */
+  HTML_TIMEOUT_MS: 10_000,
+  /** 페이지 이동(paged-slot) 요청 타임아웃 (ms) */
+  PAGED_TIMEOUT_MS: 10_000,
+  /** 통합검색 HTML 최대 크기 (실측 ~1.2MB) */
+  MAX_HTML_BYTES: 5_000_000,
+  /** 페이지 이동 응답 최대 크기 (실측 10페이지 ~400KB) */
+  MAX_JSON_BYTES: 3_000_000,
+  /** 서버 수집 캐시 TTL (ms) */
+  CACHE_TTL_MS: 60_000,
+  /** 수집 캐시 최대 항목 수 */
+  CACHE_MAX_ENTRIES: 100,
 } as const;
 
 // ==================== 정렬 옵션 ====================
@@ -81,12 +87,10 @@ export const EXCLUDE_KEYWORDS = {
 
 // ==================== 페이지네이션 설정 ====================
 export const PAGINATION_CONFIG = {
-  /** 기본 수집 페이지 수 */
-  DEFAULT_PAGES: 3,
-  /** 최대 수집 가능 페이지 수 (start <= 1000 제약) */
+  /** 기본 수집 페이지 수 (페이지 수와 무관하게 요청 횟수는 동일하므로 최대로 수집) */
+  DEFAULT_PAGES: 10,
+  /** 최대 수집 가능 페이지 수 (2026-09-13 실측: 11페이지 이상은 빈 응답) */
   MAX_PAGES: 10,
-  /** 네이버 API start 파라미터 최대값 */
-  MAX_START_VALUE: 1000,
 } as const;
 
 // ==================== 가격 필터 설정 ====================

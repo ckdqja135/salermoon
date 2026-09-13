@@ -1,8 +1,9 @@
 /**
  * 최저가 검색 API Route Handler
  * HTTP 입출력만 담당, 비즈니스 로직은 서비스 레이어로 위임
- * 
- * API 문서: https://developers.naver.com/docs/serviceapi/search/shopping/shopping.md
+ *
+ * 데이터 출처: 네이버 통합검색 쇼핑 영역 수집 (src/lib/shoppingSource.ts)
+ * 별도 API 키/환경 변수 없이 동작한다.
  */
 
 import { NextRequest, NextResponse } from "next/server";
@@ -15,14 +16,10 @@ import {
   getErrorDetails,
 } from "@/utils/errors";
 import { CACHE_CONFIG } from "@/config/naver";
-import { validateEnv } from "@/utils/env";
 
-// 환경 변수 초기화 시점 검증 (서버 시작 시 한 번만 실행)
-const envValidation = validateEnv();
-if (!envValidation.valid && process.env.NODE_ENV === "development") {
-  console.warn("⚠️ 환경 변수 검증 실패:", envValidation.missing);
-  console.warn("💡 .env.local 파일을 확인하세요.");
-}
+// 수집은 외부 HTML/JSON 요청 2회를 포함하므로 Node 런타임에서 실행 (Vercel Functions 호환)
+export const runtime = "nodejs";
+export const maxDuration = 30;
 
 /**
  * 쿼리스트링을 안정적으로 정렬하여 캐시 키 생성

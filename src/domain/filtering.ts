@@ -59,6 +59,8 @@ export function transformRawItem(raw: NaverShopRawItem): Item {
     category2: raw.category2 || undefined,
     category3: raw.category3 || undefined,
     category4: raw.category4 || undefined,
+    sellerCount: raw.sellerCount || undefined,
+    isOversea: raw.isOversea || undefined,
   };
 }
 
@@ -70,14 +72,15 @@ function hasNoiseKeyword(titleText: string): boolean {
 }
 
 /**
- * exclude 키워드 필터 체크
+ * exclude 필터 체크 (키워드 + 구조적 신호)
  * - exclude 옵션에 포함된 타입의 키워드만 체크
- * - API exclude만으로는 불완전하므로 후처리 필터 필수
+ * - cbshop(해외직구)은 수집 데이터의 isOversea 플래그도 함께 사용
  */
-function hasExcludeKeyword(titleText: string, excludeOptions: ExcludeOption[]): boolean {
+function matchesExcludeOptions(item: Item, excludeOptions: ExcludeOption[]): boolean {
   for (const option of excludeOptions) {
+    if (option === "cbshop" && item.isOversea) return true;
     const keywords = EXCLUDE_KEYWORDS[option];
-    if (containsAnyKeyword(titleText, keywords)) {
+    if (containsAnyKeyword(item.titleText, keywords)) {
       return true;
     }
   }
@@ -119,9 +122,9 @@ function matchesFilters(
   // [1단계] 가격 필터 - 최우선
   if (!matchesPriceFilter(item, minPrice, maxPrice)) return false;
 
-  // [2단계] exclude 키워드 필터 (사용자가 체크한 옵션만)
+  // [2단계] exclude 필터 (사용자가 체크한 옵션만, 키워드 + 구조적 신호)
   if (excludeOptions !== null && excludeOptions.length > 0) {
-    if (hasExcludeKeyword(item.titleText, excludeOptions)) return false;
+    if (matchesExcludeOptions(item, excludeOptions)) return false;
   }
 
   // [3단계] 노이즈 키워드 제외 (옵션)
@@ -131,14 +134,16 @@ function matchesFilters(
 }
 
 /**
- * link 기준 중복 제거
- * 첫 번째로 등장한 아이템 유지 (수집순=정확도순 보존)
+ * 상품 ID(없으면 link) 기준 중복 제거
+ * 첫 번째로 등장한 아이템 유지 (수집순=노출순 보존)
+ * 같은 상품이라도 요청마다 링크의 추적 토큰이 달라질 수 있어 productId를 우선한다.
  */
 export function deduplicateByLink(items: Item[]): Item[] {
   const seen = new Set<string>();
   return items.filter((item) => {
-    if (seen.has(item.link)) return false;
-    seen.add(item.link);
+    const key = item.productId ? `id:${item.productId}` : `link:${item.link}`;
+    if (seen.has(key)) return false;
+    seen.add(key);
     return true;
   });
 }
@@ -268,9 +273,9 @@ function countExcludedByKeywords(
 
   let count = 0;
   for (const item of items) {
-    // 가격 필터는 통과했지만 exclude 키워드에 걸린 아이템 수
+    // 가격 필터는 통과했지만 exclude 조건에 걸린 아이템 수
     if (matchesPriceFilter(item, minPrice, maxPrice)) {
-      if (hasExcludeKeyword(item.titleText, excludeOptions)) {
+      if (matchesExcludeOptions(item, excludeOptions)) {
         count++;
       }
     }

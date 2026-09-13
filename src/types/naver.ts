@@ -1,34 +1,37 @@
 import { z } from "zod";
 import { SORT_OPTIONS, EXCLUDE_OPTIONS } from "@/config/naver";
+import type { CollectionMeta } from "@/lib/shopping/core.mjs";
 
-// ==================== 네이버 API 원본 응답 타입 ====================
+// ==================== 수집 원본 아이템 타입 ====================
 
-/** 네이버 쇼핑 API 개별 아이템 (원본) */
+/**
+ * 수집된 상품 원본 아이템
+ * 종료된 네이버 쇼핑 오픈 API의 응답 형식을 그대로 유지해 기존 필터/통계 로직을 재사용한다.
+ * (현재 데이터 출처는 네이버 통합검색 쇼핑 영역 — src/lib/shoppingSource.ts)
+ */
 export interface NaverShopRawItem {
   title: string;
   link: string;
   image: string;
-  lprice: string; // API에서는 문자열로 옴
+  lprice: string; // 기존 API 형식과 동일하게 문자열 유지
   hprice: string;
-  mallName: string;
+  mallName: string; // 가격비교 카탈로그는 개별 판매처명이 없어 빈 문자열
   productId: string;
-  productType: string;
+  productType: string; // "1" = 가격비교 카탈로그, "2" = 일반 판매처 상품
   brand: string;
   maker: string;
   category1: string;
   category2: string;
   category3: string;
   category4: string;
+  /** 가격비교 카탈로그의 판매처 수 (일반 상품은 0) */
+  sellerCount?: number;
+  /** 해외직구 상품 여부 (수집 데이터의 isOverseaProduct) */
+  isOversea?: boolean;
 }
 
-/** 네이버 쇼핑 API 응답 (원본) */
-export interface NaverShopApiResponse {
-  lastBuildDate: string;
-  total: number;
-  start: number;
-  display: number;
-  items: NaverShopRawItem[];
-}
+/** 수집 경로/범위 메타 정보 (응답에 그대로 전달) */
+export type SearchCollectionMeta = CollectionMeta;
 
 // ==================== 내부 사용 타입 ====================
 
@@ -49,6 +52,10 @@ export interface Item {
   category2?: string;
   category3?: string;
   category4?: string;
+  /** 가격비교 카탈로그의 판매처 수 (일반 상품은 0) */
+  sellerCount?: number;
+  /** 해외직구 상품 여부 */
+  isOversea?: boolean;
 }
 
 /** 정렬 옵션 타입 */
@@ -130,7 +137,10 @@ export interface LowestPriceResponse {
   top10Groups: PriceGroup[];
   priceBand: PriceBandSummary | null;
   totalCandidates: number;
+  /** 수집된 일반 상품 카드 수 (광고 제외, 중복 제거 후) — 전체 검색 건수가 아님 */
   totalFromApi: number;
+  /** 수집 경로/범위 정보 — 정렬·통계는 이 범위 내 기준임을 표시 */
+  collection: SearchCollectionMeta;
   // 완화 관련 필드
   filterRelaxed: boolean;
   appliedRelaxation: RelaxationStep[];
@@ -199,30 +209,3 @@ export const SearchRequestSchema = z.object({
 
 /** 검증된 요청 타입 */
 export type ValidatedSearchRequest = z.infer<typeof SearchRequestSchema>;
-
-/** 네이버 API 아이템 스키마 (최소 검증) */
-export const NaverShopItemSchema = z.object({
-  title: z.string(),
-  link: z.string(),
-  image: z.string().optional().default(""),
-  lprice: z.preprocess(
-    (val) => (val === "" || val === null || val === undefined) ? "0" : val,
-    z.string()
-  ), // 빈 문자열/null/undefined를 "0"으로 전처리
-  hprice: z.string().optional().default("0"),
-  mallName: z.string().optional().default(""),
-  productId: z.string().optional().default(""),
-  productType: z.string().optional().default(""),
-  brand: z.string().optional().default(""),
-  maker: z.string().optional().default(""),
-  category1: z.string().optional().default(""),
-  category2: z.string().optional().default(""),
-  category3: z.string().optional().default(""),
-  category4: z.string().optional().default(""),
-});
-
-/** 네이버 API 응답 스키마 */
-export const NaverShopApiResponseSchema = z.object({
-  items: z.array(NaverShopItemSchema).optional().default([]),
-  total: z.number().optional().default(0),
-});

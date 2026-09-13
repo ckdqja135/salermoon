@@ -15,11 +15,19 @@ export class ApiError extends Error {
   }
 }
 
-/** 네이버 API 관련 에러 */
+/** 네이버 검색 수집 관련 에러 (업스트림 오류) */
 export class NaverApiError extends ApiError {
   constructor(message: string, originalError?: unknown) {
     super(message, 502, originalError);
     this.name = "NaverApiError";
+  }
+}
+
+/** 수집 경로가 차단/로그인 요구 상태일 때 (재시도 안내용) */
+export class SourceBlockedError extends ApiError {
+  constructor(message: string, originalError?: unknown) {
+    super(message, 503, originalError);
+    this.name = "SourceBlockedError";
   }
 }
 
@@ -34,7 +42,7 @@ export class ValidationError extends ApiError {
 /** 타임아웃 에러 */
 export class TimeoutError extends NaverApiError {
   constructor(originalError?: unknown) {
-    super("네이버 API 요청 시간이 초과되었습니다", originalError);
+    super("네이버 검색 요청 시간이 초과되었습니다", originalError);
     this.name = "TimeoutError";
   }
 }
@@ -49,6 +57,9 @@ export function toSafeErrorMessage(error: unknown): string {
   }
   if (error instanceof TimeoutError) {
     return "서버 응답 시간이 초과되었습니다. 잠시 후 다시 시도해주세요.";
+  }
+  if (error instanceof SourceBlockedError) {
+    return "네이버 검색 접근이 일시적으로 제한되었습니다. 잠시 후 다시 시도해주세요.";
   }
   if (error instanceof NaverApiError) {
     return "외부 서비스 연결에 실패했습니다. 잠시 후 다시 시도해주세요.";

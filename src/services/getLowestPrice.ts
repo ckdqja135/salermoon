@@ -2,28 +2,27 @@
  * 최저가 검색 비즈니스 로직 서비스
  * Route Handler에서 분리된 핵심 로직
  *
+ * 데이터 출처: 네이버 통합검색 쇼핑 영역 수집 (src/lib/shoppingSource.ts)
+ * - 수집 순서는 통합검색 노출순(관련도순)이며, 정렬·통계는 수집된 상품 범위 내 기준이다.
+ * - 페이지 수와 무관하게 검색 1회당 원격 요청은 최대 2회(HTML 1 + 페이지 이동 1)다.
+ *
  * [핵심 원칙]
  * 1. 가격 필터(minPrice/maxPrice)는 절대 완화되지 않음
- * 2. exclude 옵션은 API + 후처리 키워드 필터 모두 적용
+ * 2. exclude 옵션은 구조적 신호(해외직구 플래그) + 키워드 후처리 필터로 적용
  * 3. 완화 대상은 비가격 필터(filterNoise, exclude, pages)만 해당
  */
 
-import { fetchAllPages } from "@/lib/naverShopClient";
+import { collectShoppingItems } from "@/lib/shoppingSource";
 import { filterAndSortItems, extractTopResults } from "@/domain/filtering";
 import {
   SearchFilters,
   LowestPriceResponse,
   ValidatedSearchRequest,
   SortOption,
-  ExcludeOption,
   RelaxationStep,
   AppliedFilters,
 } from "@/types/naver";
-import {
-  PAGINATION_CONFIG,
-  DEFAULT_FILTERS,
-  SORT_OPTIONS,
-} from "@/config/naver";
+import { PAGINATION_CONFIG, DEFAULT_FILTERS } from "@/config/naver";
 
 /**
  * 검색 필터 정규화
@@ -64,15 +63,10 @@ export function normalizeFilters(request: ValidatedSearchRequest): SearchFilters
 /**
  * 최저가 검색 메인 서비스 함수
  *
- * [핵심 원칙]
- * - 가격 필터(minPrice/maxPrice)는 절대 완화되지 않음
- * - exclude 옵션은 API exclude + 후처리 키워드 필터 모두 적용
- * - 완화 대상은 비가격 필터(filterNoise, exclude, pages)만 해당
- *
  * 완화 순서 (결과 0건 시, 비가격 필터만):
  * 1) filterNoise=false (domain 레이어에서 처리)
- * 2) exclude 파라미터 제거 (API + 후처리 필터 모두 해제)
- * 3) pages를 1페이지로 축소
+ * 2) pages를 최대(10)로 확대해 재수집
+ * 3) exclude 해제 후 재필터 (수집 데이터에 후처리만 하므로 재수집 불필요)
  *
  * @param query - 검색어
  * @param filters - 정규화된 필터
@@ -91,42 +85,25 @@ export async function getLowestPrice(
   let currentPages = filters.pages;
   const appliedRelaxation: RelaxationStep[] = [];
 
-  // 1. 네이버 API에서 데이터 수집 (exclude 파라미터 포함)
-  let { items: rawItems, total: totalFromApi } = await fetchAllPages(
-    query,
-    currentPages,
-    SORT_OPTIONS.ASC,
-    currentExclude ?? [] // exclude 파라미터를 API에 전달
-  );
+  // 1. 통합검색에서 상품 수집 (광고 제외·중복 제거·가격/링크 검증 포함)
+  let collected = await collectShoppingItems(query, currentPages);
 
-  // 2. 필터링 및 정렬 (가격 필터는 항상 원본 유지 + exclude 키워드 후처리)
-  let filterResult = filterAndSortItems(rawItems, {
+  // 2. 필터링 및 정렬 (가격 필터 원본 유지 + exclude 후처리)
+  let filterResult = filterAndSortItems(collected.items, {
     ...filters,
-    minPrice, // 원본 유지
-    maxPrice, // 원본 유지
-    exclude: currentExclude, // API exclude + 후처리 키워드 필터 적용
+    minPrice,
+    maxPrice,
+    exclude: currentExclude,
     pages: currentPages,
   });
 
-  // 3. 결과가 0건이고 추가 완화가 가능한 경우 (비가격 필터만)
-  
-  // [완화 단계 2] minPrice 설정 시 pages 증가하여 고가 제품 탐색
-  if (filterResult.items.length === 0 && currentPages < PAGINATION_CONFIG.MAX_PAGES && minPrice !== null) {
-    currentPages = Math.min(currentPages + 3, PAGINATION_CONFIG.MAX_PAGES);
+  // [완화 단계 2] 결과 0건이면 수집 범위를 최대로 확대해 재수집
+  if (filterResult.items.length === 0 && currentPages < PAGINATION_CONFIG.MAX_PAGES) {
+    currentPages = PAGINATION_CONFIG.MAX_PAGES;
     appliedRelaxation.push("increasePages");
 
-    // API 재호출 (더 많은 페이지로, 정확도순 유지)
-    const result = await fetchAllPages(
-      query,
-      currentPages,
-      filters.sort, // 원래 정렬 유지 (정확도순)
-      currentExclude ?? []
-    );
-    rawItems = result.items;
-    totalFromApi = result.total;
-
-    // 재필터링
-    filterResult = filterAndSortItems(rawItems, {
+    collected = await collectShoppingItems(query, currentPages);
+    filterResult = filterAndSortItems(collected.items, {
       ...filters,
       minPrice,
       maxPrice,
@@ -136,60 +113,25 @@ export async function getLowestPrice(
     });
   }
 
-  // [완화 단계 3] exclude 파라미터 제거 (API + 후처리 필터 모두 해제)
+  // [완화 단계 3] exclude 해제 (후처리 필터만 해제하면 되므로 재수집 없음)
   if (filterResult.items.length === 0 && currentExclude !== null && currentExclude.length > 0) {
     currentExclude = null;
     appliedRelaxation.push("dropExclude");
 
-    // API 재호출 (exclude 없이, 정렬은 유지)
-    const result = await fetchAllPages(
-      query,
-      currentPages,
-      filters.sort, // 정확도순 유지 (가격순 변경 X)
-      []
-    );
-    rawItems = result.items;
-    totalFromApi = result.total;
-
-    // 재필터링
-    filterResult = filterAndSortItems(rawItems, {
+    filterResult = filterAndSortItems(collected.items, {
       ...filters,
       minPrice,
       maxPrice,
       filterNoise: filterResult.appliedFilters.filterNoise,
-      exclude: currentExclude, // null로 해제
-      pages: currentPages,
-    });
-  }
-
-  // [완화 단계 4] minPrice 없을 때만 pages 축소 + 가격순 정렬
-  if (filterResult.items.length === 0 && currentPages > 1 && minPrice === null) {
-    currentPages = 1;
-    appliedRelaxation.push("reducePages");
-
-    const result = await fetchAllPages(
-      query,
-      currentPages,
-      SORT_OPTIONS.ASC, // 최저가를 찾을 때만 가격순
-      currentExclude ?? []
-    );
-    rawItems = result.items;
-    totalFromApi = result.total;
-
-    filterResult = filterAndSortItems(rawItems, {
-      ...filters,
-      minPrice,
-      maxPrice,
-      filterNoise: false,
       exclude: currentExclude,
       pages: currentPages,
     });
   }
 
-  // 4. 전체 완화 단계 병합
+  // 3. 전체 완화 단계 병합
   const allRelaxation = [...filterResult.appliedRelaxation, ...appliedRelaxation];
 
-  // 5. 최종 적용된 필터 상태 (가격 필터는 항상 원본)
+  // 4. 최종 적용된 필터 상태 (가격 필터는 항상 원본)
   const finalAppliedFilters: AppliedFilters = {
     minPrice, // 원본 유지 (절대 null로 변경되지 않음)
     maxPrice, // 원본 유지 (절대 null로 변경되지 않음)
@@ -199,10 +141,10 @@ export async function getLowestPrice(
     pages: currentPages,
   };
 
-  // 6. Top1, Top10 그룹 추출
+  // 5. Top1, Top10 그룹 추출
   const { top1, top10Groups, priceBand } = extractTopResults(filterResult.items);
 
-  // 7. 응답 구성 (allItems 포함 - 클라이언트에서 추가 필터링/정렬/표시 가능)
+  // 6. 응답 구성 (allItems 포함 - 클라이언트에서 추가 필터링/정렬/표시 가능)
   return {
     query,
     filters,
@@ -210,7 +152,9 @@ export async function getLowestPrice(
     top10Groups,
     priceBand,
     totalCandidates: filterResult.items.length,
-    totalFromApi,
+    // 수집된 일반 상품 수 (광고 제외·중복 제거 후). 전체 검색 건수가 아님.
+    totalFromApi: collected.items.length,
+    collection: collected.meta,
     filterRelaxed: allRelaxation.length > 0,
     appliedRelaxation: allRelaxation,
     appliedFilters: finalAppliedFilters,
