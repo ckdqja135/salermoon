@@ -6,9 +6,12 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint"
+    "lint": "eslint",
+    "test": "node --test scripts/lib/shopping-state.test.mjs src/lib/shopping/__tests__/core.test.mjs",
+    "check:shopping-source": "node scripts/check-shopping-source.mjs"
   },
   "dependencies": {
+    "acorn": "8.15.0",
     "html-to-image": "^1.11.13",
     "next": "16.1.1",
     "react": "19.2.3",
