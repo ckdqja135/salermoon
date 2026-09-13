@@ -23,6 +23,24 @@ interface Item {
   category2?: string;
   category3?: string;
   category4?: string;
+  /** 가격비교 카탈로그의 판매처 수 (일반 상품은 없음) */
+  sellerCount?: number;
+  /** 해외직구 상품 여부 */
+  isOversea?: boolean;
+}
+
+/** 수집 경로/범위 메타 (서버 응답의 collection) */
+interface CollectionInfo {
+  source: string;
+  order: string;
+  pagesRequested: number;
+  pagesCollected: number;
+  totalCards: number;
+  adCards: number;
+  organicCards: number;
+  catalogCards: number;
+  droppedCards: number;
+  warnings: string[];
 }
 
 interface PriceGroup {
@@ -76,6 +94,8 @@ interface SearchResult {
   appliedFilters: AppliedFilters;
   excludedByKeywordsCount: number;
   allItems: Item[];
+  /** 수집 경로/범위 정보 (통합검색 수집 기준) */
+  collection?: CollectionInfo;
 }
 
 interface TargetPriceComparison {
@@ -94,13 +114,9 @@ type ThemeMode = "light" | "dark";
 
 // ==================== 상수 ====================
 const UI_CONFIG = {
-  DEFAULT_PAGES: 3,
+  // 페이지 수와 무관하게 검색 1회의 원격 요청 수는 같으므로 기본값을 최대로 둔다
+  DEFAULT_PAGES: 10,
   MAX_PAGES: 10,
-} as const;
-
-const API_CONFIG = {
-  DAILY_LIMIT: 25000,
-  CALLS_PER_SEARCH: 3,
 } as const;
 
 const DISPLAY_COUNT_OPTIONS = [10, 20, 30, 50, 100] as const;
@@ -129,6 +145,17 @@ const RELAXATION_STEP_LABELS: Record<RelaxationStep, string> = {
 // ==================== 유틸리티 함수 ====================
 function formatPrice(num: number): string {
   return num.toLocaleString("ko-KR");
+}
+
+/**
+ * 판매처 표시 라벨
+ * 가격비교 카탈로그는 개별 판매처명이 없으므로(수집 데이터에 존재하지 않음)
+ * 실제로 확인된 판매처 수를 표시한다. 없는 판매처명을 지어내지 않는다.
+ */
+function mallLabel(item: Item): string {
+  if (item.mallName) return item.mallName;
+  if (item.sellerCount && item.sellerCount > 0) return `가격비교 · 판매처 ${formatPrice(item.sellerCount)}곳`;
+  return "판매처 정보 없음";
 }
 
 function parsePrice(value: string): number {
@@ -452,7 +479,7 @@ function PagesSelectCompact({
         {Array.from({ length: UI_CONFIG.MAX_PAGES }, (_, i) => i + 1).map(
           (num) => (
             <option key={num} value={num}>
-              {num}페이지 (최대 {num * 100}개)
+              {num}페이지
             </option>
           )
         )}
@@ -537,7 +564,7 @@ function Top1Card({ item }: { item: Item }) {
               dangerouslySetInnerHTML={{ __html: item.title }}
             />
             <p className="text-sm text-[var(--color-text-secondary)] mt-1">
-              {item.mallName}
+              {mallLabel(item)}
               {item.brand && <span className="ml-2">| {item.brand}</span>}
             </p>
           </div>
@@ -800,7 +827,7 @@ function Top10SidebarItem({
           dangerouslySetInnerHTML={{ __html: item.title }}
         />
         <p className="text-xs text-[var(--color-text-secondary)]">
-          {item.mallName}
+          {mallLabel(item)}
         </p>
       </div>
       <div className="text-right flex-shrink-0">
@@ -889,7 +916,7 @@ function PriceGroupModal({
                   dangerouslySetInnerHTML={{ __html: item.title }}
                 />
                 <p className="text-xs text-[var(--color-text-secondary)] mt-1">
-                  {item.mallName}
+                  {mallLabel(item)}
                   {item.brand && <span className="ml-2">| {item.brand}</span>}
                 </p>
               </div>
@@ -918,7 +945,7 @@ function ListViewItem({ item, index }: { item: Item; index: number }) {
           dangerouslySetInnerHTML={{ __html: item.title }}
         />
         <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-          {item.mallName}
+          {mallLabel(item)}
         </p>
       </div>
       <div className="text-right flex-shrink-0">
@@ -947,7 +974,7 @@ function GridViewItem({ item }: { item: Item }) {
           dangerouslySetInnerHTML={{ __html: item.title }}
         />
         <div className="flex items-center gap-1 mb-2">
-          <span className="mall-badge">{item.mallName}</span>
+          <span className="mall-badge">{mallLabel(item)}</span>
           {item.brand && <span className="brand-badge">{item.brand}</span>}
         </div>
         <div>
@@ -1148,13 +1175,19 @@ function SearchSummaryPanel({
             <span className="font-medium truncate ml-2">{result.query}</span>
           </div>
           <div className="flex justify-between">
-            <span className="text-[var(--color-text-secondary)]">API 결과</span>
+            <span className="text-[var(--color-text-secondary)]">수집 상품</span>
             <span className="font-medium">{formatPrice(result.totalFromApi)}개</span>
           </div>
           <div className="flex justify-between">
             <span className="text-[var(--color-text-secondary)]">필터 후</span>
             <span className="font-medium text-[var(--color-primary)]">{formatPrice(result.totalCandidates)}개</span>
           </div>
+          {result.collection && result.collection.adCards > 0 && (
+            <div className="flex justify-between">
+              <span className="text-[var(--color-text-secondary)]">광고 제외</span>
+              <span className="font-medium">{formatPrice(result.collection.adCards)}개</span>
+            </div>
+          )}
           {result.excludedByKeywordsCount > 0 && (
             <div className="flex justify-between">
               <span className="text-[var(--color-text-secondary)]">키워드 제외</span>
@@ -1168,6 +1201,16 @@ function SearchSummaryPanel({
             <div>노이즈필터: {appliedFilters.filterNoise ? "ON" : "OFF"}</div>
             <div>제외: {appliedFilters.exclude?.join(", ") || "없음"}</div>
           </div>
+        </div>
+        <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
+          <p className="text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
+            네이버 통합검색 쇼핑 노출 결과 기반이며, 정렬·최저가·통계는 수집된
+            {result.collection ? ` ${result.collection.pagesCollected}페이지` : " 범위"} 내
+            상품 기준입니다. 전체 쇼핑 검색과 다를 수 있습니다.
+          </p>
+          {result.collection?.warnings?.map((warning) => (
+            <p key={warning} className="text-[11px] mt-1 text-[var(--color-accent-dark)]">⚠ {warning}</p>
+          ))}
         </div>
       </div>
     </div>
@@ -1415,7 +1458,7 @@ function ListViewGroupItem({
           </span>
         </div>
         <p className="text-xs text-[var(--color-text-secondary)] mt-0.5">
-          {item.mallName} {group.count > 1 && `외 ${group.count - 1}개 판매처`}
+          {mallLabel(item)} {group.count > 1 && `외 ${group.count - 1}개 판매처`}
         </p>
       </div>
       <div className="text-right flex-shrink-0">
@@ -1459,7 +1502,7 @@ function GridViewGroupItem({
           dangerouslySetInnerHTML={{ __html: item.title }}
         />
         <p className="text-xs text-[var(--color-text-secondary)] mb-2 line-clamp-1">
-          {item.mallName} {group.count > 1 && `외 ${group.count - 1}개`}
+          {mallLabel(item)} {group.count > 1 && `외 ${group.count - 1}개`}
         </p>
         <div className="text-right">
           <span className="price">{formatPrice(group.price)}</span>
@@ -2164,15 +2207,8 @@ export default function Home() {
       )}
 
       <footer className="text-center py-6 text-xs text-[var(--color-text-secondary)]">
-        <a
-          href="https://developers.naver.com/docs/serviceapi/search/shopping/shopping.md"
-          target="_blank"
-          rel="noopener noreferrer"
-          className="underline hover:text-[var(--color-primary)]"
-        >
-          네이버 쇼핑 API
-        </a>
-        를 활용한 최저가 검색 서비스
+        네이버 통합검색 쇼핑 노출 결과를 수집·분석하는 최저가 검색 서비스 ·
+        표시 가격은 검색 결과 기준이며 배송비·결제 조건에 따라 달라질 수 있습니다
       </footer>
     </main>
   );
