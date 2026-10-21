@@ -34,7 +34,10 @@ interface CollectionInfo {
   source: string;
   order: string;
   pagesRequested: number;
+  /** 성공한 원격 수집 요청 수 */
   pagesCollected: number;
+  /** 가격 구간 분할 수집에 사용한 구간 ("min|max") */
+  priceSlices?: string[];
   totalCards: number;
   adCards: number;
   organicCards: number;
@@ -479,7 +482,7 @@ function PagesSelectCompact({
         {Array.from({ length: UI_CONFIG.MAX_PAGES }, (_, i) => i + 1).map(
           (num) => (
             <option key={num} value={num}>
-              {num}페이지
+              {num}회 요청
             </option>
           )
         )}
@@ -666,7 +669,7 @@ function formatHistorySummary(params: SearchHistoryParams): string {
     parts.push("노이즈제외");
   }
   
-  parts.push(`${params.pages}페이지`);
+  parts.push(`수집 ${params.pages}회`);
   
   return parts.join(" · ");
 }
@@ -1197,15 +1200,19 @@ function SearchSummaryPanel({
         </div>
         <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
           <div className="text-xs text-[var(--color-text-secondary)] space-y-2">
-            <div>범위: {appliedFilters.pages}페이지</div>
+            <div>범위: 수집 요청 {appliedFilters.pages}회</div>
             <div>노이즈필터: {appliedFilters.filterNoise ? "ON" : "OFF"}</div>
             <div>제외: {appliedFilters.exclude?.join(", ") || "없음"}</div>
           </div>
         </div>
         <div className="mt-4 pt-4 border-t border-[var(--color-border)]">
           <p className="text-[11px] leading-relaxed text-[var(--color-text-secondary)]">
-            네이버 통합검색 쇼핑 노출 결과 기반이며, 정렬·최저가·통계는 수집된
-            {result.collection ? ` ${result.collection.pagesCollected}페이지` : " 범위"} 내
+            네이버 통합검색 쇼핑 노출 결과 기반이며, 정렬·최저가·통계는 수집된 범위
+            {result.collection ? ` (요청 ${result.collection.pagesCollected}회${
+              result.collection.priceSlices?.length
+                ? `, 가격 구간 ${result.collection.priceSlices.length}개 분할`
+                : ""
+            })` : ""} 내
             상품 기준입니다. 전체 쇼핑 검색과 다를 수 있습니다.
           </p>
           {result.collection?.warnings?.map((warning) => (

@@ -4,12 +4,13 @@
  * 종료된 네이버 쇼핑 오픈 API를 대체한다. API 키가 필요 없다.
  * 검증 기록: docs/crawling-feasibility.md, 재현: npm run check:shopping-source -- "검색어" --deep
  *
- * 수집 경로 (2026-09-13 검증):
+ * 수집 경로 (2026-10-21 기준):
  * 1. https://search.naver.com/search.naver?where=shopping&query=... HTML의
  *    쇼핑 초기 상태(_INITIAL_STATE)를 acorn으로 정적 해석 (1페이지 카드 + 세션 파라미터)
- * 2. pages > 1이면 공개 클라이언트와 동일한
- *    https://ns-portal.shopping.naver.com/api/v2/shopping-paged-slot 요청 1회로
- *    1~N페이지를 누적 수신 (N > 10은 빈 응답 — 실측 한도)
+ * 2. 상품 슬롯 API(ns-portal shopping-paged-slot v3)는 요청당 1페이지만 반환하므로
+ *    (2026-10 중순 소스 개편으로 누적 페이지네이션 제거됨),
+ *    관측 가격의 분위수로 나눈 가격 구간(price="min|max") 요청을 병렬 수행해
+ *    수집 범위를 넓힌다. 수집 범위 N = 원격 요청 수 상한 (HTML 1 + 기본 1 + 구간 N-2).
  *
  * 주의: 공식 API 계약이 아닌 웹 화면 내부 요청이므로 형식 변경에 대비해
  * 구조 검증 실패 시 명확한 오류를 던지고, 차단(418/429/로그인)은 별도 오류로 구분한다.
@@ -20,6 +21,8 @@ import {
   cardsFromPages,
   pagesFromPagedResponse,
   pagingRequest,
+  pickPrice,
+  buildPriceSlices,
   buildCollection,
   detectBlocked,
   SOURCE_MAX_PAGES,
@@ -117,11 +120,12 @@ async function fetchInitialState(
   return { state, firstPageCards: cardsFromPages(state.initProps.pagedSlot) };
 }
 
-async function fetchPagedCards(
+async function fetchSlotCards(
   state: ShoppingState,
-  page: number
-): Promise<{ cards: SourceCard[]; pagesReturned: number[] } | { warning: string }> {
-  const { url, headers } = pagingRequest(state, page);
+  label: string,
+  extraParams: Record<string, string> = {}
+): Promise<{ cards: SourceCard[] } | { warning: string }> {
+  const { url, headers } = pagingRequest(state, 1, extraParams);
   let res: { status: number; finalHost: string; body: string; ok: boolean };
   try {
     res = await fetchText(url, {
@@ -130,25 +134,44 @@ async function fetchPagedCards(
       maxBytes: CRAWLER_CONFIG.MAX_JSON_BYTES,
     });
   } catch (error) {
-    return { warning: `페이지 이동 요청 실패(${error instanceof Error ? error.message : String(error)}) — 1페이지 결과만 사용` };
+    return { warning: `${label} 요청 실패(${error instanceof Error ? error.message : String(error)})` };
   }
   if (res.status === 418 || res.status === 429) {
-    return { warning: `페이지 이동 요청이 제한됨(HTTP ${res.status}) — 1페이지 결과만 사용` };
+    return { warning: `${label} 요청이 제한됨(HTTP ${res.status})` };
   }
   if (!res.ok) {
-    return { warning: `페이지 이동 응답 오류(HTTP ${res.status}) — 1페이지 결과만 사용` };
+    return { warning: `${label} 응답 오류(HTTP ${res.status})` };
   }
   let json: unknown;
   try {
     json = JSON.parse(res.body);
   } catch {
-    return { warning: "페이지 이동 응답이 JSON이 아님 — 1페이지 결과만 사용" };
+    return { warning: `${label} 응답이 JSON이 아님` };
   }
   const pages = pagesFromPagedResponse(json);
   if (!pages) {
-    return { warning: "페이지 이동 응답 형식이 변경됨 — 1페이지 결과만 사용" };
+    return { warning: `${label} 응답 형식이 변경됨` };
   }
-  return { cards: cardsFromPages(pages), pagesReturned: pages.map((p) => p.page) };
+  return { cards: cardsFromPages(pages) };
+}
+
+/** 작은 동시성으로 병렬 실행 (소스 부하와 응답 시간의 절충) */
+async function mapWithConcurrency<T, R>(
+  items: T[],
+  limit: number,
+  run: (item: T) => Promise<R>
+): Promise<R[]> {
+  const results: R[] = new Array(items.length);
+  let next = 0;
+  const workers = Array.from({ length: Math.min(limit, items.length) }, async () => {
+    for (;;) {
+      const index = next++;
+      if (index >= items.length) return;
+      results[index] = await run(items[index]);
+    }
+  });
+  await Promise.all(workers);
+  return results;
 }
 
 async function collectOnce(query: string, pages: number): Promise<CollectResult> {
@@ -160,39 +183,66 @@ async function collectOnce(query: string, pages: number): Promise<CollectResult>
     return buildCollection({
       primaryCards: [],
       pagesRequested: effectivePages,
-      pagesReturned: [],
+      requestsSucceeded: 1,
       warnings: ["통합검색에 쇼핑 결과가 없습니다."],
     });
   }
 
   const { state, firstPageCards } = initial;
+  const warnings: string[] = [];
+  let requestsSucceeded = 1; // HTML
 
   if (effectivePages === 1) {
     return buildCollection({
       primaryCards: firstPageCards,
       pagesRequested: effectivePages,
-      pagesReturned: [1],
+      requestsSucceeded,
     });
   }
 
-  const paged = await fetchPagedCards(state, effectivePages);
-  if ("warning" in paged) {
-    // 추가 페이지 실패는 부분 결과로 처리 (초기 HTML의 1페이지는 확보됨)
-    return buildCollection({
-      primaryCards: firstPageCards,
-      pagesRequested: effectivePages,
-      pagesReturned: [1],
-      warnings: [paged.warning],
-    });
+  // 기본(필터 없는) 상품 슬롯 요청 — 노출 순서의 기준. HTML과는 광고 로테이션으로 구성이 다르다.
+  const base = await fetchSlotCards(state, "상품 슬롯");
+  let primaryCards = firstPageCards;
+  const extraCards: SourceCard[] = [];
+  if ("warning" in base) {
+    warnings.push(base.warning);
+  } else {
+    primaryCards = base.cards;
+    extraCards.push(...firstPageCards);
+    requestsSucceeded += 1;
   }
 
-  // 누적 응답(1~N페이지)을 노출 순서의 기준으로 삼고,
-  // 광고 로테이션으로 구성이 달라진 초기 HTML의 추가 상품은 뒤에 덧붙인다.
+  // 가격 구간 분할: 기준 수집에서 관측한 가격 분포로 구간을 나눠 추가 수집
+  const observedPrices = [...primaryCards, ...extraCards]
+    .filter((card) => card.sourceType === "SAS")
+    .map((card) => pickPrice(card))
+    .filter((price): price is number => price !== null);
+  const priceSlices = buildPriceSlices(observedPrices, effectivePages - 2);
+
+  if (priceSlices.length > 0) {
+    const sliceResults = await mapWithConcurrency(priceSlices, 3, (slice) =>
+      fetchSlotCards(state, `가격 구간(${slice.replace("|", "~")}원)`, {
+        price: slice,
+        filterSource: "SHOPPING",
+      })
+    );
+    for (const result of sliceResults) {
+      if ("warning" in result) {
+        warnings.push(result.warning);
+      } else {
+        extraCards.push(...result.cards);
+        requestsSucceeded += 1;
+      }
+    }
+  }
+
   return buildCollection({
-    primaryCards: paged.cards,
-    extraCards: firstPageCards,
+    primaryCards,
+    extraCards,
     pagesRequested: effectivePages,
-    pagesReturned: paged.pagesReturned,
+    requestsSucceeded,
+    priceSlices,
+    warnings,
   });
 }
 

@@ -7,6 +7,7 @@ import {
   pagingRequest,
   sanitizeTitleHtml,
   mapCardToRawItem,
+  buildPriceSlices,
   buildCollection,
   detectBlocked,
 } from "../core.mjs";
@@ -103,10 +104,10 @@ test("광고를 제외하고 누적 페이지의 중복 상품을 ID로 제거�
   const ad = { cardType: "AD_CARD", sourceType: "AD", nvMid: 999, productName: "광고", discountedSalePrice: 100, productClickUrl: { pcUrl: "https://ad.example" } };
   const superPoint = { cardType: "SUPER_POINT_CARD", sourceType: "SUPER_POINT", nvMid: 998, productName: "프로모션", discountedSalePrice: 100 };
   const { items, meta } = buildCollection({
-    primaryCards: [ad, organicCard, catalogCard, { ...organicCard }, superPoint], // 같은 nvMid 반복(누적 응답)
+    primaryCards: [ad, organicCard, catalogCard, { ...organicCard }, superPoint], // 같은 nvMid 반복(중복 응답)
     extraCards: [{ ...organicCard, nvMid: 777, productName: "다른 상품" }],
     pagesRequested: 4,
-    pagesReturned: [1, 2, 3, 4],
+    requestsSucceeded: 4,
   });
   assert.equal(meta.adCards, 2);
   assert.equal(meta.organicCards, 2);
@@ -114,13 +115,45 @@ test("광고를 제외하고 누적 페이지의 중복 상품을 ID로 제거�
   assert.equal(items.length, 3);
   assert.deepEqual([...new Set(items.map((p) => p.productId))].length, items.length);
   assert.equal(meta.pagesCollected, 4);
+  assert.equal(meta.order, "relevance");
 });
 
 test("검증 실패 카드는 droppedCards로 집계된다", () => {
   const broken = { ...organicCard, nvMid: 555, productUrl: { pcUrl: "" }, productClickUrl: { pcUrl: "" } };
-  const { items, meta } = buildCollection({ primaryCards: [broken], pagesRequested: 1, pagesReturned: [1] });
+  const { items, meta } = buildCollection({ primaryCards: [broken], pagesRequested: 1, requestsSucceeded: 1 });
   assert.equal(items.length, 0);
   assert.equal(meta.droppedCards, 1);
+});
+
+test("가격 구간 분할 시 수집 메타에 구간과 순서가 기록된다", () => {
+  const { meta } = buildCollection({
+    primaryCards: [organicCard],
+    pagesRequested: 5,
+    requestsSucceeded: 5,
+    priceSlices: ["0|10000", "10000|99999999"],
+  });
+  assert.equal(meta.order, "relevance-price-sliced");
+  assert.deepEqual(meta.priceSlices, ["0|10000", "10000|99999999"]);
+});
+
+// ==================== 가격 구간 계산 ====================
+
+test("가격 분위수로 전체 범위를 닫힌 구간으로 덮는다", () => {
+  const slices = buildPriceSlices([1000, 2000, 3000, 4000, 5000, 6000, 7000, 8000], 4);
+  assert.equal(slices[0].startsWith("0|"), true);
+  assert.equal(slices[slices.length - 1].endsWith("|99999999"), true);
+  // 인접 구간은 경계를 공유해 빈틈이 없다
+  for (let i = 1; i < slices.length; i++) {
+    assert.equal(slices[i - 1].split("|")[1], slices[i].split("|")[0]);
+  }
+  assert.equal(slices.length, 4);
+});
+
+test("가격이 몰려 경계가 겹치면 구간 수를 줄이고, 2 미만 요청이나 가격 없음엔 분할하지 않는다", () => {
+  assert.deepEqual(buildPriceSlices([5000, 5000, 5000], 4), ["0|5000", "5000|99999999"]);
+  assert.deepEqual(buildPriceSlices([1000, 2000], 1), []);
+  assert.deepEqual(buildPriceSlices([], 4), []);
+  assert.deepEqual(buildPriceSlices([NaN, -5, 0], 4), []);
 });
 
 // ==================== 페이지 응답 해석 ====================

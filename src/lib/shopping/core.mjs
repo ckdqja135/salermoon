@@ -84,15 +84,22 @@ export function pagesFromPagedResponse(json) {
 }
 
 /**
- * 공개 클라이언트가 사용하는 페이지 이동 요청 구성 (2026-09-13 관측 형식 반영).
+ * 공개 클라이언트가 사용하는 상품 슬롯 요청 구성 (2026-10-21 관측: v3, 요청당 1페이지 반환).
  * 개인 로그인 쿠키나 비밀키는 사용하지 않는다.
+ *
+ * 2026-09-13에는 v2가 page=N 요청에 1~N페이지를 누적 반환했으나, 2026-10 중순
+ * 클라이언트 개편(v3) 이후 v2/v3 모두 어떤 IP에서도 1페이지만 반환한다.
+ * 대신 필터 파라미터가 동작한다: price="min|max"(닫힌 구간만), brandIds, filterSource.
+ *
+ * @param extraParams price·filterSource 등 추가 쿼리 파라미터
  */
-export function pagingRequest(state, page) {
-  const url = new URL("https://ns-portal.shopping.naver.com/api/v2/shopping-paged-slot");
+export function pagingRequest(state, page, extraParams = {}) {
+  const url = new URL("https://ns-portal.shopping.naver.com/api/v3/shopping-paged-slot");
   const params = {
     ...state.initProps.byPassBFFParams,
     isFastDelivery: false, isArriveGuarantee: false,
     query: state.query, source: state.areaCode, page,
+    ...extraParams,
   };
   for (const [key, value] of Object.entries(params)) {
     if (value !== null && value !== undefined) url.searchParams.set(key, String(value));
@@ -135,7 +142,7 @@ export function sanitizeTitleHtml(name) {
 }
 
 /** 표시 가격 선택: 할인가(KRW) → 할인가 → 정가 순. 양수 정수가 아니면 null. */
-function pickPrice(card) {
+export function pickPrice(card) {
   for (const value of [card.discountedKRWSalePrice, card.discountedSalePrice, card.salePrice]) {
     if (typeof value === "number" && Number.isFinite(value) && value > 0) return Math.round(value);
   }
@@ -181,20 +188,52 @@ export function mapCardToRawItem(card) {
 }
 
 /**
- * 수집된 카드들(초기 HTML + 페이지 이동 응답)을 병합해 상품 목록과 수집 메타를 만든다.
+ * 가격 구간 분할 수집용 구간 계산.
+ * 관측된 가격의 분위수로 경계를 잡아 전체 범위 [0, 99999999]를 닫힌 구간들로 덮는다.
+ * (소스가 요청당 1페이지만 반환하므로, 가격 구간별 요청으로 수집 범위를 넓힌다.
+ *  열린 구간("|5000", "25000|")은 소스가 무시하므로 반드시 양끝을 명시한다)
  *
- * @param primaryCards 노출 순서를 대표하는 카드 목록 (pages>1이면 paged-slot의 1~N페이지, 아니면 HTML 1페이지)
- * @param extraCards   같은 검색의 다른 응답에서 나온 추가 카드 (광고 로테이션으로 구성이 달라짐). 뒤에 덧붙인다.
- * @param pagesRequested 사용자가 요청한 페이지 수
- * @param pagesReturned  실제 응답에 포함된 페이지 번호 목록
- * @param warnings       상위 레이어가 수집 중 기록한 경고
+ * @param prices 기준 수집에서 관측된 상품 가격들
+ * @param sliceCount 원하는 구간 수 (2 미만이면 분할 없이 빈 배열 — 전체 구간은 기준 수집과 중복)
+ * @returns "min|max" 형식 문자열 배열 (가격 오름차순)
  */
-export function buildCollection({ primaryCards, extraCards = [], pagesRequested, pagesReturned, warnings = [] }) {
+export function buildPriceSlices(prices, sliceCount) {
+  const MAX_PRICE = 99999999;
+  const valid = [...new Set(prices.filter((p) => Number.isFinite(p) && p > 0))].sort((a, b) => a - b);
+  if (sliceCount < 2 || valid.length === 0) return [];
+  const boundaries = new Set();
+  for (let i = 1; i < sliceCount; i++) {
+    const idx = Math.min(valid.length - 1, Math.floor((valid.length * i) / sliceCount));
+    const price = valid[idx];
+    if (price > 0 && price < MAX_PRICE) boundaries.add(price);
+  }
+  const slices = [];
+  let lo = 0;
+  for (const boundary of [...boundaries].sort((a, b) => a - b)) {
+    slices.push(`${lo}|${boundary}`);
+    lo = boundary;
+  }
+  slices.push(`${lo}|${MAX_PRICE}`);
+  return slices;
+}
+
+/**
+ * 수집된 카드들(초기 HTML + 상품 슬롯 응답들)을 병합해 상품 목록과 수집 메타를 만든다.
+ *
+ * @param primaryCards 노출 순서를 대표하는 카드 목록 (기준 수집)
+ * @param extraCards   같은 검색의 다른 응답(HTML 로테이션, 가격 구간 요청)에서 나온 추가 카드. 뒤에 덧붙인다.
+ * @param pagesRequested 사용자가 요청한 수집 범위 (원격 요청 수 상한)
+ * @param requestsSucceeded 실제로 성공한 원격 수집 요청 수 (HTML 포함)
+ * @param priceSlices  사용한 가격 구간 목록 ("min|max")
+ * @param warnings     상위 레이어가 수집 중 기록한 경고
+ */
+export function buildCollection({ primaryCards, extraCards = [], pagesRequested, requestsSucceeded, priceSlices = [], warnings = [] }) {
   const meta = {
     source: "naver-integrated-search",
-    order: "relevance",
+    order: priceSlices.length > 0 ? "relevance-price-sliced" : "relevance",
     pagesRequested,
-    pagesCollected: pagesReturned.length,
+    pagesCollected: requestsSucceeded,
+    priceSlices,
     totalCards: 0,
     adCards: 0,
     organicCards: 0,

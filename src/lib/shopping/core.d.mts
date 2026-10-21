@@ -68,9 +68,13 @@ export interface CrawledRawItem {
 
 export interface CollectionMeta {
   source: "naver-integrated-search";
-  order: "relevance";
+  /** "relevance" 또는 가격 구간 분할 시 "relevance-price-sliced" */
+  order: string;
   pagesRequested: number;
+  /** 성공한 원격 수집 요청 수 (HTML 포함) */
   pagesCollected: number;
+  /** 사용한 가격 구간 ("min|max") */
+  priceSlices: string[];
   totalCards: number;
   adCards: number;
   organicCards: number;
@@ -84,15 +88,22 @@ export const SOURCE_MAX_PAGES: number;
 export function parseShoppingState(html: string): ShoppingState | null;
 export function cardsFromPages(pages: unknown): SourceCard[];
 export function pagesFromPagedResponse(json: unknown): SourcePage[] | null;
-export function pagingRequest(state: ShoppingState, page: number): { url: URL; headers: Record<string, string> };
+export function pagingRequest(
+  state: ShoppingState,
+  page: number,
+  extraParams?: Record<string, string>
+): { url: URL; headers: Record<string, string> };
 export function httpUrl(value: unknown): string | null;
 export function sanitizeTitleHtml(name: string): string;
+export function pickPrice(card: SourceCard): number | null;
+export function buildPriceSlices(prices: number[], sliceCount: number): string[];
 export function mapCardToRawItem(card: SourceCard): CrawledRawItem | null;
 export function buildCollection(input: {
   primaryCards: SourceCard[];
   extraCards?: SourceCard[];
   pagesRequested: number;
-  pagesReturned: number[];
+  requestsSucceeded: number;
+  priceSlices?: string[];
   warnings?: string[];
 }): { items: CrawledRawItem[]; meta: CollectionMeta };
 export function detectBlocked(input: { status: number; finalHost: string; html?: string }): string | null;
