@@ -547,13 +547,19 @@ function ProductImage({ src, alt, size = "md" }: { src?: string; alt: string; si
   );
 }
 
-/** Top1 카드 */
-function Top1Card({ item }: { item: Item }) {
+/** Top1 카드 — 클릭 시 해당 가격 그룹 팝업을 연다 (팝업에서 개별 링크 이동) */
+function Top1Card({ item, onShowGroup }: { item: Item; onShowGroup?: () => void }) {
   return (
     <a
       href={item.link}
       target="_blank"
       rel="noopener noreferrer"
+      onClick={(e) => {
+        if (onShowGroup) {
+          e.preventDefault();
+          onShowGroup();
+        }
+      }}
       className="card top1-card p-5 block fade-in"
     >
       <div className="flex flex-col md:flex-row gap-5">
@@ -813,13 +819,6 @@ function Top10SidebarItem({
   const isMulti = group.count > 1;
   const item = group.representative;
 
-  const handleClick = (e: React.MouseEvent) => {
-    if (isMulti) {
-      e.preventDefault();
-      onGroupClick(group);
-    }
-  };
-
   const content = (
     <div className="flex items-center gap-2">
       <span className={`rank-badge-xs ${rank <= 3 ? "top3" : ""}`}>{rank}</span>
@@ -842,26 +841,14 @@ function Top10SidebarItem({
     </div>
   );
 
-  if (isMulti) {
-    return (
-      <button
-        onClick={handleClick}
-        className="sidebar-item multi w-full text-left"
-      >
-        {content}
-      </button>
-    );
-  }
-
+  // 1건짜리 그룹도 팝업을 거쳐 상세·링크를 확인하도록 통일
   return (
-    <a
-      href={item.link}
-      target="_blank"
-      rel="noopener noreferrer"
-      className="sidebar-item"
+    <button
+      onClick={() => onGroupClick(group)}
+      className={`sidebar-item ${isMulti ? "multi" : ""} w-full text-left`}
     >
       {content}
-    </a>
+    </button>
   );
 }
 
@@ -2174,7 +2161,14 @@ export default function Home() {
                     <span className="text-xl">🏆</span>
                     최저가 상품
                   </h2>
-                  <Top1Card item={effectiveTop1} />
+                  <Top1Card
+                    item={effectiveTop1}
+                    onShowGroup={
+                      effectiveTop10Groups.length > 0
+                        ? () => setSelectedGroup(effectiveTop10Groups[0])
+                        : undefined
+                    }
+                  />
                 </section>
               )}
 
