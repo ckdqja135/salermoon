@@ -6,6 +6,9 @@
 
 import { NextRequest, NextResponse } from "next/server";
 
+// 이미지 CDN(pstatic.net) 호출도 한국 리전에서 실행 (검색 API와 동일 리전)
+export const preferredRegion = "icn1";
+
 const MAX_IMAGE_BYTES = 5_000_000;
 const TIMEOUT_MS = 8_000;
 

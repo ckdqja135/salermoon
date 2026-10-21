@@ -20,6 +20,9 @@ import { CACHE_CONFIG } from "@/config/naver";
 // 수집은 외부 HTML/JSON 요청 2회를 포함하므로 Node 런타임에서 실행 (Vercel Functions 호환)
 export const runtime = "nodejs";
 export const maxDuration = 30;
+// 네이버 호출을 한국 리전에서 실행 — 해외 데이터센터 IP에는 페이지 이동 응답이
+// 1페이지로 제한되는 것을 확인 (2026-10-16, iad1 기본 리전에서 실측)
+export const preferredRegion = "icn1";
 
 /**
  * 쿼리스트링을 안정적으로 정렬하여 캐시 키 생성
